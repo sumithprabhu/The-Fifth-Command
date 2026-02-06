@@ -1,0 +1,410 @@
+{
+  "allRound": [
+    {
+      "name": "Sentinel",
+      "image": "/pandas/sentinel/sentinel_1.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 6,
+      "description": "A balanced warrior with equal prowess in all combat disciplines."
+    },
+    {
+      "name": "Nexus",
+      "image": "/pandas/sentinel/sentinel_2.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 5,
+      "description": "A versatile fighter capable of adapting to any battlefield situation."
+    },
+    {
+      "name": "Zenith",
+      "image": "/pandas/sentinel/sentinel_3.png",
+      "attack": 6,
+      "defense": 5,
+      "strategist": 6,
+      "description": "Master of all trades with exceptional versatility in combat."
+    },
+    {
+      "name": "Vortex",
+      "image": "/pandas/sentinel/sentinel_4.png",
+      "attack": 4,
+      "defense": 4,
+      "strategist": 4,
+      "description": "A struggling warrior still learning the ways of balanced combat."
+    },
+    {
+      "name": "Prime",
+      "image": "/pandas/sentinel/sentinel_5.png",
+      "attack": 5,
+      "defense": 6,
+      "strategist": 5,
+      "description": "An experienced fighter with well-rounded combat abilities."
+    },
+    {
+      "name": "Core",
+      "image": "/pandas/sentinel/sentinel_6.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 5,
+      "description": "The foundation of any team with consistent performance across all areas."
+    }
+  ],
+  "attacker": [
+    {
+      "name": "Blade",
+      "image": "/pandas/attacker/attacker_1.png",
+      "attack": 9,
+      "defense": 5,
+      "strategist": 6,
+      "description": "A fierce warrior whose devastating strikes can break through any defense."
+    },
+    {
+      "name": "Razor",
+      "image": "/pandas/attacker/attacker_2.png",
+      "attack": 8,
+      "defense": 6,
+      "strategist": 5,
+      "description": "Swift and deadly, this attacker strikes with precision and speed."
+    },
+    {
+      "name": "Fury",
+      "image": "/pandas/attacker/attacker_3.png",
+      "attack": 9,
+      "defense": 5,
+      "strategist": 7,
+      "description": "Unleashes overwhelming offensive power that crushes opponents."
+    },
+    {
+      "name": "Storm",
+      "image": "/pandas/attacker/attacker_4.png",
+      "attack": 8,
+      "defense": 6,
+      "strategist": 6,
+      "description": "A relentless force of nature that attacks with unstoppable momentum."
+    },
+    {
+      "name": "Rage",
+      "image": "/pandas/attacker/attacker_5.png",
+      "attack": 9,
+      "defense": 4,
+      "strategist": 5,
+      "description": "Berserker warrior who sacrifices defense for maximum offensive capability."
+    },
+    {
+      "name": "Strike",
+      "image": "/pandas/attacker/attacker_6.png",
+      "attack": 8,
+      "defense": 5,
+      "strategist": 6,
+      "description": "Specializes in quick, powerful attacks that catch enemies off guard."
+    },
+    {
+      "name": "Thunder",
+      "image": "/pandas/attacker/attacker_7.png",
+      "attack": 9,
+      "defense": 6,
+      "strategist": 5,
+      "description": "Lightning-fast attacker who delivers electrifying blows to opponents."
+    },
+    {
+      "name": "Inferno",
+      "image": "/pandas/attacker/attacker_8.png",
+      "attack": 8,
+      "defense": 5,
+      "strategist": 7,
+      "description": "Burns through enemy lines with fiery determination and power."
+    },
+    {
+      "name": "Crusher",
+      "image": "/pandas/attacker/attacker_9.png",
+      "attack": 9,
+      "defense": 4,
+      "strategist": 6,
+      "description": "Overwhelming strength that shatters defenses with brute force."
+    },
+    {
+      "name": "Viper",
+      "image": "/pandas/attacker/attacker_10.png",
+      "attack": 8,
+      "defense": 6,
+      "strategist": 5,
+      "description": "Deadly precision strikes that find weaknesses in any armor."
+    },
+    {
+      "name": "Savage",
+      "image": "/pandas/attacker/attacker_11.png",
+      "attack": 9,
+      "defense": 5,
+      "strategist": 6,
+      "description": "Wild and unpredictable attacker who fights with primal ferocity."
+    },
+    {
+      "name": "Titan",
+      "image": "/pandas/attacker/attacker_12.png",
+      "attack": 8,
+      "defense": 6,
+      "strategist": 7,
+      "description": "Massive offensive presence that dominates the battlefield."
+    },
+    {
+      "name": "Wrath",
+      "image": "/pandas/attacker/attacker_13.png",
+      "attack": 9,
+      "defense": 4,
+      "strategist": 5,
+      "description": "Unleashes devastating attacks fueled by pure anger and determination."
+    },
+    {
+      "name": "Blitz",
+      "image": "/pandas/attacker/attacker_14.png",
+      "attack": 8,
+      "defense": 5,
+      "strategist": 6,
+      "description": "Lightning-fast strikes that overwhelm enemies before they can react."
+    },
+    {
+      "name": "Havoc",
+      "image": "/pandas/attacker/attacker_15.png",
+      "attack": 9,
+      "defense": 6,
+      "strategist": 5,
+      "description": "Creates chaos on the battlefield with relentless offensive pressure."
+    },
+    {
+      "name": "Reaper",
+      "image": "/pandas/attacker/attacker_16.png",
+      "attack": 8,
+      "defense": 5,
+      "strategist": 7,
+      "description": "Deadly attacker who strikes fear into the hearts of enemies."
+    }
+  ],
+  "defender": [
+    {
+      "name": "Guardian",
+      "image": "/pandas/defender/defender_1.png",
+      "attack": 5,
+      "defense": 9,
+      "strategist": 6,
+      "description": "An unbreakable shield that protects allies with unwavering resolve."
+    },
+    {
+      "name": "Fortress",
+      "image": "/pandas/defender/defender_2.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "Impenetrable defense that stands firm against any assault."
+    },
+    {
+      "name": "Bastion",
+      "image": "/pandas/defender/defender_3.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 7,
+      "description": "A strategic defender who uses positioning to protect the team."
+    },
+    {
+      "name": "Shield",
+      "image": "/pandas/defender/defender_4.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "The first line of defense, absorbing damage for those behind."
+    },
+    {
+      "name": "Bulwark",
+      "image": "/pandas/defender/defender_5.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 6,
+      "description": "Massive defensive presence that blocks all incoming threats."
+    },
+    {
+      "name": "Aegis",
+      "image": "/pandas/defender/defender_6.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "Divine protection that shields allies from harm."
+    },
+    {
+      "name": "Rampart",
+      "image": "/pandas/defender/defender_7.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 7,
+      "description": "Strategic defender who controls the battlefield through positioning."
+    },
+    {
+      "name": "Barrier",
+      "image": "/pandas/defender/defender_8.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "Creates an impenetrable wall that enemies cannot breach."
+    },
+    {
+      "name": "Sentinel",
+      "image": "/pandas/defender/defender_9.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 6,
+      "description": "Ever-watchful guardian who never lets threats pass unnoticed."
+    },
+    {
+      "name": "Warden",
+      "image": "/pandas/defender/defender_10.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "Protects the team with tactical awareness and strong defenses."
+    },
+    {
+      "name": "Palisade",
+      "image": "/pandas/defender/defender_11.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 7,
+      "description": "Strategic defender who uses terrain and positioning effectively."
+    },
+    {
+      "name": "Citadel",
+      "image": "/pandas/defender/defender_12.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "A fortress of defense that stands unyielding against all odds."
+    },
+    {
+      "name": "Stronghold",
+      "image": "/pandas/defender/defender_13.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 6,
+      "description": "Unbreakable defensive position that secures the battlefield."
+    },
+    {
+      "name": "Bunker",
+      "image": "/pandas/defender/defender_14.png",
+      "attack": 6,
+      "defense": 9,
+      "strategist": 5,
+      "description": "Underground defender who protects from fortified positions."
+    },
+    {
+      "name": "Keep",
+      "image": "/pandas/defender/defender_15.png",
+      "attack": 5,
+      "defense": 8,
+      "strategist": 7,
+      "description": "The last line of defense, holding the line when all else fails."
+    }
+  ],
+  "strategist": [
+    {
+      "name": "Sage",
+      "image": "/pandas/strategist/strategist_1.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 9.5,
+      "description": "Master tactician who outwits enemies with brilliant strategic planning."
+    },
+    {
+      "name": "Oracle",
+      "image": "/pandas/strategist/strategist_2.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 9,
+      "description": "Foresees enemy movements and plans counter-strategies in advance."
+    },
+    {
+      "name": "Mind",
+      "image": "/pandas/strategist/strategist_3.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 9,
+      "description": "Brilliant strategist who thinks several steps ahead of opponents."
+    },
+    {
+      "name": "Genius",
+      "image": "/pandas/strategist/strategist_4.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 9.5,
+      "description": "Exceptional intellect that devises unbeatable tactical formations."
+    },
+    {
+      "name": "Tactician",
+      "image": "/pandas/strategist/strategist_5.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 8.5,
+      "description": "Expert planner who coordinates team movements with precision."
+    },
+    {
+      "name": "Mastermind",
+      "image": "/pandas/strategist/strategist_6.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 9,
+      "description": "Brilliant strategist who manipulates the battlefield to advantage."
+    },
+    {
+      "name": "Thinker",
+      "image": "/pandas/strategist/strategist_7.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 8.5,
+      "description": "Analytical mind that finds optimal solutions to complex problems."
+    },
+    {
+      "name": "Planner",
+      "image": "/pandas/strategist/strategist_8.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 9,
+      "description": "Meticulous strategist who prepares for every possible scenario."
+    },
+    {
+      "name": "Schemer",
+      "image": "/pandas/strategist/strategist_9.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 8.5,
+      "description": "Cunning planner who sets traps and outmaneuvers enemies."
+    },
+    {
+      "name": "Advisor",
+      "image": "/pandas/strategist/strategist_10.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 9,
+      "description": "Wise counselor who guides the team with strategic wisdom."
+    },
+    {
+      "name": "Intellect",
+      "image": "/pandas/strategist/strategist_11.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 9.5,
+      "description": "Superior intelligence that dominates through strategic superiority."
+    },
+    {
+      "name": "Analyst",
+      "image": "/pandas/strategist/strategist_12.png",
+      "attack": 5,
+      "defense": 5,
+      "strategist": 8.5,
+      "description": "Data-driven strategist who makes decisions based on patterns."
+    },
+    {
+      "name": "Visionary",
+      "image": "/pandas/strategist/strategist_13.png",
+      "attack": 6,
+      "defense": 6,
+      "strategist": 9,
+      "description": "Forward-thinking strategist who sees the bigger picture."
+    }
+  ]
+}
