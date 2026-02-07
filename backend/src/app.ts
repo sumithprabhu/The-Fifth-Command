@@ -18,12 +18,7 @@ function createApp() {
 
   app.use(httpLogger);
   app.use(helmet());
-  app.use(
-    cors({
-      origin: config.corsOrigin === "*" ? true : config.corsOrigin,
-      credentials: true
-    })
-  );
+  app.use(cors());
   app.use(express.json({ limit: "1mb" }));
 
   const limiter = rateLimit({
