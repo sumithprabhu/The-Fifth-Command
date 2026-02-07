@@ -69,6 +69,38 @@ export const openApiSpec = {
                     revealedCards: {
                       type: "array",
                       items: { type: "object" }
+                    },
+                    players: {
+                      type: "array",
+                      description: "List of all players with their details",
+                      items: {
+                        type: "object",
+                        properties: {
+                          address: {
+                            type: "string",
+                            format: "address",
+                            description: "Player's Ethereum address"
+                          },
+                          chipBalance: {
+                            type: "integer",
+                            description: "Current chip balance"
+                          },
+                          cardsOwned: {
+                            type: "integer",
+                            description: "Number of cards owned"
+                          },
+                          cards: {
+                            type: "array",
+                            description: "List of cards owned by this player",
+                            items: { type: "object" }
+                          }
+                        }
+                      }
+                    },
+                    roundEndsInSeconds: {
+                      type: "integer",
+                      nullable: true,
+                      description: "Seconds until current round ends. null if no timeout is set (waiting for first bid)"
                     }
                   }
                 }

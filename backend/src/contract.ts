@@ -56,6 +56,34 @@ export const CONTRACT_ABI = [
     outputs: [{ type: "uint256" }]
   },
   {
+    name: "currentPlayers",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ type: "uint256" }],
+    outputs: [{ type: "address" }]
+  },
+  {
+    name: "currentGameId",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    name: "currentRound",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }]
+  },
+  {
+    name: "currentTotalCards",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }]
+  },
+  {
     name: "GameStarted",
     type: "event",
     inputs: [

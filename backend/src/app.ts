@@ -67,7 +67,7 @@ async function bootstrap() {
   });
 
   const { contract } = getContract();
-  game.init({ contract, io });
+  await game.init({ contract, io });
 
   io.on("connection", (socket) => {
     logger.info({ socketId: socket.id }, "Socket connected");

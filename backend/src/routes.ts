@@ -31,9 +31,9 @@ export function createRoutes() {
 
   router.get(
     "/game/status",
-    (req: Request, res: Response, next: NextFunction): void => {
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
-        const status = game.getStatus();
+        const status = await game.getStatus();
         res.json(status);
       } catch (e) {
         logger.error({ err: e }, "GET /game/status failed");

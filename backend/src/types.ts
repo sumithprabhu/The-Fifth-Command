@@ -45,6 +45,13 @@ export interface BidEntry {
   round: number;
 }
 
+export interface PlayerInfo {
+  address: string;
+  chipBalance: number;
+  cardsOwned: number;
+  cards: Card[];
+}
+
 export interface GameStatus {
   gameId: number;
   gameState: GameState;
@@ -53,6 +60,8 @@ export interface GameStatus {
   currentCard: Card | null;
   highestBid: HighestBidPublic;
   revealedCards: Card[];
+  players: PlayerInfo[];
+  roundEndsInSeconds: number | null; // Seconds until round ends, null if no timeout set
 }
 
 export interface HighestBidPublic {
