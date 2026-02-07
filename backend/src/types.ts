@@ -1,0 +1,83 @@
+import { BigNumber, Contract } from "ethers";
+import type { Server as SocketIOServer } from "socket.io";
+
+export type GameState = "NotStarted" | "InProgress" | "Finished";
+
+export interface RawCard {
+  name: string;
+  image: string;
+  attack: number;
+  defense: number;
+  strategist?: number;
+  description: string;
+}
+
+export type CardType = "allRound" | "attacker" | "defender" | "strategist";
+
+export interface Card {
+  id: number;
+  name: string;
+  image: string;
+  type: CardType;
+  attack: number;
+  defense: number;
+  heal: number;
+  raw: RawCard;
+}
+
+export interface BidMessage {
+  bidder: string;
+  gameId: number;
+  round: number;
+  cardId: number;
+  amount: number;
+  timestamp: number;
+  nonce: number;
+}
+
+export interface BidEntry {
+  bidder: string;
+  amount: number;
+  timestamp: number;
+  nonce: string;
+  cardId: number;
+  gameId: number;
+  round: number;
+}
+
+export interface GameStatus {
+  gameId: number;
+  gameState: GameState;
+  currentRound: number;
+  totalCards: number;
+  currentCard: Card | null;
+  highestBid: HighestBidPublic;
+  revealedCards: Card[];
+}
+
+export interface HighestBidPublic {
+  amount: number;
+  bidder: string | null;
+}
+
+export interface GameEngineDeps {
+  contract: Contract;
+  io: SocketIOServer;
+}
+
+export interface PowerComputation {
+  power: number;
+  valid: boolean;
+  breakdown: {
+    attack: number;
+    defense: number;
+    heal: number;
+  };
+}
+
+export interface ChipBalanceResult {
+  raw: BigNumber;
+  asNumber: number;
+}
+
+
