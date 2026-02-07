@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import CharacterCard from "@/components/CharacterCard";
 import charMeta from "@/char_meta.json";
 import Marquee from "react-fast-marquee";
+// @ts-ignore - Package may need installation
+import SlotCounter from "react-slot-counter";
 
 export default function TournamentPage() {
   const params = useParams();
@@ -22,6 +24,14 @@ export default function TournamentPage() {
   
   // Flag to control game start state for testing
   const start = true;
+
+  // Sample bid data
+  const currentBid = 1250;
+  const currentBidder = "0x742d...0bEb";
+  const pastBid = 980;
+  const pastBidder = "0x3a5f...2cD4";
+  const currentSet = "attacker"; // Can be "sentinel", "attacker", "defender", or "strategist"
+  const remainingCards = 47;
 
   // Sample bidding data for ticker
   const biddingData = useMemo(() => [
@@ -387,17 +397,17 @@ export default function TournamentPage() {
           </div>
         </div>
 
-        {/* Center Section - 50% - Individually Scrollable */}
-        <div className="w-[50%] h-full overflow-y-auto">
-          <div className="rounded-lg p-8 w-full min-h-full" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
+        {/* Center Section - 50% - No Scroll */}
+        <div className="w-[50%] h-full overflow-hidden">
+          <div className="rounded-lg p-6 w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
             {!start ? (
-              <div className="flex items-center justify-center h-full min-h-[600px]">
+              <div className="flex items-center justify-center">
                 <p className="text-3xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                   Game is Yet to Start
                 </p>
               </div>
             ) : (
-              <div className="flex items-center justify-center">
+              <div className="flex flex-col items-center justify-center w-full">
                 <div className="w-80">
                   <CharacterCard
                     name={charMeta.attacker[0].name}
@@ -408,6 +418,88 @@ export default function TournamentPage() {
                     type="attacker"
                     description={charMeta.attacker[0].description}
                   />
+                </div>
+                
+                {/* Bid Information */}
+                <div className="w-full max-w-2xl space-y-6 px-4 mt-6">
+                  {/* Current Bid Row */}
+                  <div className="flex items-start justify-between gap-8">
+                    {/* Current Bid - Left Side */}
+                    <div className="text-center space-y-2 flex-1">
+                      <p className="text-lg font-bold text-white uppercase tracking-wider">
+                        Current Bid
+                      </p>
+                      <div className="flex items-center justify-center">
+                        <div className="text-4xl font-bold text-white">
+                          <SlotCounter
+                            value={currentBid}
+                            duration={2}
+                            startValue={0}
+                            useMonospaceWidth={true}
+                          />
+                        </div>
+                        <span className="text-2xl font-semibold text-gray-400 ml-2">pts</span>
+                      </div>
+                      <p className="text-sm text-gray-300 mt-2">
+                        <span className="text-gray-400">Current Bidder:</span>{" "}
+                        <span className="text-white font-semibold">{currentBidder}</span>
+                      </p>
+                    </div>
+
+                    {/* Current Set - Right Side */}
+                    <div className="text-center space-y-2 flex-1">
+                      <p className="text-lg font-bold text-white uppercase tracking-wider">
+                        Current Set
+                      </p>
+                      <div className="flex items-center justify-center">
+                        <p className="text-4xl font-bold text-white capitalize">
+                          {currentSet}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Past Bid Row */}
+                  <div className="flex items-start justify-between gap-8 pt-4 border-t" style={{ borderColor: 'rgba(194, 143, 243, 0.3)' }}>
+                    {/* Past Bid - Left Side */}
+                    <div className="text-center space-y-2 flex-1">
+                      <p className="text-base font-semibold text-gray-400 uppercase tracking-wide">
+                        Past Bid
+                      </p>
+                      <div className="flex items-center justify-center">
+                        <div className="text-3xl font-bold text-gray-400">
+                          <SlotCounter
+                            value={pastBid}
+                            duration={2}
+                            startValue={0}
+                            useMonospaceWidth={true}
+                          />
+                        </div>
+                        <span className="text-xl font-semibold text-gray-500 ml-2">pts</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        <span className="text-gray-600">Past Bidder:</span>{" "}
+                        <span className="text-gray-400 font-medium">{pastBidder}</span>
+                      </p>
+                    </div>
+
+                    {/* Remaining Cards - Right Side */}
+                    <div className="text-center space-y-2 flex-1">
+                      <p className="text-base font-semibold text-gray-400 uppercase tracking-wide">
+                        Remaining Cards
+                      </p>
+                      <div className="flex items-center justify-center">
+                        <div className="text-3xl font-bold text-gray-400">
+                          <SlotCounter
+                            value={remainingCards}
+                            duration={2}
+                            startValue={0}
+                            useMonospaceWidth={true}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
