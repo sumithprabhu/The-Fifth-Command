@@ -287,34 +287,34 @@ async function validateBid(
     throw new Error("Contract not initialized");
   }
 
-  const now = Date.now();
-  const msgTs = Number(message.timestamp);
-  if (Number.isNaN(msgTs)) {
-    throw new Error("Invalid timestamp");
-  }
-  if (Math.abs(now - msgTs) > BID_MESSAGE_MAX_AGE_MS) {
-    throw new Error("Bid message too old");
-  }
+  // const now = Date.now();
+  // const msgTs = Number(message.timestamp);
+  // if (Number.isNaN(msgTs)) {
+  //   throw new Error("Invalid timestamp");
+  // }
+  // if (Math.abs(now - msgTs) > BID_MESSAGE_MAX_AGE_MS) {
+  //   throw new Error("Bid message too old");
+  // }
 
-  const domain = await getBidDomain();
-  const types = getBidTypes();
+  // const domain = await getBidDomain();
+  // const types = getBidTypes();
 
-  let recovered: string;
-  try {
-    recovered = ethers.utils.verifyTypedData(
-      domain,
-      types as any,
-      message,
-      signature
-    );
-  } catch (e: any) {
-    logger.error({ err: e }, "verifyTypedData failed");
-    throw new Error("Invalid signature");
-  }
+  // let recovered: string;
+  // try {
+  //   recovered = ethers.utils.verifyTypedData(
+  //     domain,
+  //     types as any,
+  //     message,
+  //     signature
+  //   );
+  // } catch (e: any) {
+  //   logger.error({ err: e }, "verifyTypedData failed");
+  //   throw new Error("Invalid signature");
+  // }
 
-  if (recovered.toLowerCase() !== String(message.bidder || "").toLowerCase()) {
-    throw new Error("Signature does not match bidder");
-  }
+  // if (recovered.toLowerCase() !== String(message.bidder || "").toLowerCase()) {
+  //   throw new Error("Signature does not match bidder");
+  // }
 
   if (state.gameState !== "InProgress") {
     throw new Error("Game is not in progress");
@@ -331,23 +331,23 @@ async function validateBid(
     throw new Error("Invalid cardId for this round");
   }
 
-  const bidder = recovered.toLowerCase();
-  const nonce = String(message.nonce);
-  if (!state.usedNonces[bidder]) {
-    state.usedNonces[bidder] = new Set();
-  }
-  if (state.usedNonces[bidder].has(nonce)) {
-    throw new Error("Nonce already used");
-  }
+  const bidder = message.bidder.toLowerCase();
+  // const nonce = String(message.nonce);
+  // if (!state.usedNonces[bidder]) {
+  //   state.usedNonces[bidder] = new Set();
+  // }
+  // if (state.usedNonces[bidder].has(nonce)) {
+  //   throw new Error("Nonce already used");
+  // }
 
   const amount = Number(message.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Invalid bid amount");
   }
 
-  if (amount < state.highestBid.amount + MIN_INCREMENT) {
+  if (amount < state.highestBid.amount) {
     throw new Error(
-      `Bid must be at least ${MIN_INCREMENT} chips higher than current highest`
+      `Bid must be higher than current highest`
     );
   }
 
@@ -363,7 +363,7 @@ async function validateBid(
     throw new Error("Insufficient chips for this bid");
   }
 
-  state.usedNonces[bidder].add(nonce);
+  // state.usedNonces[bidder].add(nonce);
 
   return {
     bidder,
@@ -375,10 +375,10 @@ export async function handleBid(
   message: BidMessage,
   signature: string
 ): Promise<BidEntry> {
-  // const { bidder, amount } = await validateBid(message, signature);
+  const { bidder, amount } = await validateBid(message, signature);
 
-  const bidder = message.bidder;
-  const amount = message.amount;
+  // const bidder = message.bidder;
+  // const amount = message.amount;
 
   const bidEntry: BidEntry = {
     bidder,
