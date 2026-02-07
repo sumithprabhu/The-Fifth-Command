@@ -16,7 +16,7 @@ import {
 } from "./types";
 
 const MIN_INCREMENT = 10; // chips
-const ROUND_TIMEOUT_MS = 30_000; // 30 seconds
+const ROUND_TIMEOUT_MS = 120_000; // 2 minutes
 const BID_MESSAGE_MAX_AGE_MS = 5 * 60_000; // 5 minutes
 
 // EIP-712 typed data
@@ -73,27 +73,26 @@ function loadCards(): Card[] {
   const filePath = path.join(__dirname, "..", "cards.json");
   const raw = fs.readFileSync(filePath, "utf8");
   const data = JSON.parse(raw) as {
-    allRound: any[];
+    sentinel: any[];
     attacker: any[];
     defender: any[];
     strategist: any[];
   };
 
-  let idCounter = 1;
   const flattenType = (arr: any[] | undefined, type: Card["type"]): Card[] =>
     (arr || []).map((c) => ({
-      id: idCounter++,
+      id: c.characterId,
       name: c.name,
       image: c.image,
       type,
       attack: Number(c.attack) || 0,
       defense: Number(c.defense) || 0,
-      heal: Number(c.strategist) || 0,
+      strategist: Number(c.strategist) || 0,
       raw: c
     }));
 
   allCards = [
-    ...flattenType(data.allRound, "allRound"),
+    ...flattenType(data.sentinel, "sentinel"),
     ...flattenType(data.attacker, "attacker"),
     ...flattenType(data.defender, "defender"),
     ...flattenType(data.strategist, "strategist")
@@ -162,17 +161,18 @@ function resetRoundTimeout() {
     clearTimeout(state.roundTimeoutHandle);
     state.roundTimeoutHandle = null;
   }
-  state.roundTimeoutEndsAt = null;
   
   if (state.gameState !== "InProgress") return;
 
-  // Only start countdown if there's at least one bid
-  // Rounds wait indefinitely until first bid is placed
-  if (state.highestBid.amount <= 0 || !state.highestBid.bidder) {
-    return;
+  // Determine timeout duration: 2 minutes if this is the initial setup, 30 seconds if extending due to a bid
+  let timeoutDuration = ROUND_TIMEOUT_MS; // 2 minutes for new round
+  
+  if (state.roundTimeoutEndsAt !== null) {
+    // There was already a timeout running, extend by 30 seconds instead
+    timeoutDuration = 30_000; // 30 seconds
   }
 
-  const timeoutEndsAt = Date.now() + ROUND_TIMEOUT_MS;
+  const timeoutEndsAt = Date.now() + timeoutDuration;
   state.roundTimeoutEndsAt = timeoutEndsAt;
 
   state.roundTimeoutHandle = setTimeout(() => {
@@ -180,7 +180,7 @@ function resetRoundTimeout() {
     endRound().catch((err) => {
       logger.error({ err }, "endRound failed from timeout");
     });
-  }, ROUND_TIMEOUT_MS);
+  }, timeoutDuration);
 }
 
 function getCurrentCard(): Card | null {
@@ -342,40 +342,36 @@ export async function endRound(): Promise<void> {
 
   const winner = state.highestBid.bidder;
   const finalPrice = state.highestBid.amount;
+  const zeroAddress = "0x0000000000000000000000000000000000000000";
+  const settleWinner = winner || zeroAddress;
+  const settlePrice = finalPrice > 0 ? finalPrice : 0;
 
-  if (!winner || finalPrice <= 0) {
-    logger.info(
-      {
-        gameId: state.gameId,
-        round: state.currentRound
-      },
-      "Round ended without valid bids"
-    );
-  } else {
+  // Track card if there's a valid winner
+  if (winner && finalPrice > 0) {
     if (!state.wonCards[winner]) state.wonCards[winner] = [];
     state.wonCards[winner].push(currentCard);
+  }
 
-    try {
-      const tx = await contractInstance.settleCard(
-        currentCard.id,
-        winner,
-        ethers.BigNumber.from(finalPrice)
-      );
-      logger.info(
-        {
-          hash: tx.hash,
-          gameId: state.gameId,
-          round: state.currentRound,
-          winner,
-          finalPrice
-        },
-        "settleCard tx sent"
-      );
-      await tx.wait();
-      logger.info({ hash: tx.hash }, "settleCard tx confirmed");
-    } catch (e: any) {
-      logger.error({ err: e }, "settleCard failed");
-    }
+  try {
+    const tx = await contractInstance.settleCard(
+      currentCard.id,
+      settleWinner,
+      ethers.BigNumber.from(settlePrice)
+    );
+    logger.info(
+      {
+        hash: tx.hash,
+        gameId: state.gameId,
+        round: state.currentRound,
+        winner: settleWinner,
+        finalPrice: settlePrice
+      },
+      "settleCard tx sent"
+    );
+    await tx.wait();
+    logger.info({ hash: tx.hash }, "settleCard tx confirmed");
+  } catch (e: any) {
+    logger.error({ err: e }, "settleCard failed");
   }
 
   state.currentRound += 1;
@@ -403,40 +399,57 @@ export async function endRound(): Promise<void> {
         card: getCurrentCard()
       });
     }
-    // Don't start timeout until first bid is placed in new round
-    // Round waits indefinitely for first bid
+    // Start 2-minute timer for new round
+    resetRoundTimeout();
   }
 }
 
 export function computePower(playerCards: Card[]): PowerComputation {
-  if (!playerCards || playerCards.length === 0) {
-    return { power: 0, valid: false, breakdown: { attack: 0, defense: 0, heal: 0 } };
+  // Assume Card = { attack: number, defense: number, strategist: number }
+  
+  if (playerCards.length !== 5) {
+    return { 
+      power: 0, 
+      valid: false, 
+      breakdown: { attackScore: 0, defenseScore: 0, strategyScore: 0 } 
+    };
   }
 
-  let attackers = 0;
-  let defenders = 0;
-  let healers = 0;
+  // Step 1: Select top 2 attackers by attack value
+  const attackers = [...playerCards]
+    .sort((a, b) => (b.attack || 0) - (a.attack || 0))
+    .slice(0, 2);
+  const attackSum = attackers.reduce((sum, card) => sum + (card.attack || 0), 0);
+  const attackScore = (attackSum / 20) * 100;
 
-  let attack = 0;
-  let defense = 0;
-  let heal = 0;
+  // Step 2: From remaining 3 cards, select top 2 defenders by defense value
+  const remainingCards = playerCards.filter(
+    (_, index) => !attackers.some(attacker => attacker === playerCards[index])
+  );
+  const defenders = [...remainingCards]
+    .sort((a, b) => (b.defense || 0) - (a.defense || 0))
+    .slice(0, 2);
+  const defenseSum = defenders.reduce((sum, card) => sum + (card.defense || 0), 0);
+  const defenseScore = (defenseSum / 20) * 100;
 
-  for (const c of playerCards) {
-    attack += c.attack || 0;
-    defense += c.defense || 0;
-    heal += c.heal || 0;
+  // Step 3: Last remaining card as strategist
+  const strategistCard = remainingCards.find(
+    card => !defenders.some(defender => defender === card)
+  ) || { strategist: 0 };
+  const strategyScore = ((strategistCard.strategist || 0) / 10) * 100;
 
-    if (c.type === "attacker") attackers += 1;
-    if (c.type === "defender") defenders += 1;
-    if (c.type === "strategist" || c.type === "allRound") healers += 1;
-  }
+  // Step 4: Final weighted score
+  const power = (attackScore * 0.35) + (defenseScore * 0.35) + (strategyScore * 0.30);
 
-  const valid =
-    attackers >= 1 && defenders >= 1 && healers >= 1 && playerCards.length >= 3;
-
-  const power = attack + defense + heal * 2;
-
-  return { power, valid, breakdown: { attack, defense, heal } };
+  return {
+    power: Math.round(power * 100) / 100, // Round to 2 decimals
+    valid: true,
+    breakdown: {
+      attackScore: Math.round(attackScore * 100) / 100,
+      defenseScore: Math.round(defenseScore * 100) / 100,
+      strategyScore: Math.round(strategyScore * 100) / 100,
+    }
+  };
 }
 
 async function endGame(): Promise<void> {
@@ -499,8 +512,8 @@ async function startNewGame(totalCards: number): Promise<void> {
     });
   }
 
-  // Don't start timeout until first bid is placed
-  // Round waits indefinitely for first bid
+  // Start 2-minute timer for first round
+  resetRoundTimeout();
 }
 
 export async function maybeStartGameIfReady(
@@ -773,6 +786,8 @@ async function syncStateFromContract(): Promise<void> {
         if (card && state.wonCards[winner]) {
           state.wonCards[winner].push(card);
         }
+
+        console.log("EVENT: ", event)
       }
       
       logger.info(
@@ -812,6 +827,8 @@ async function syncStateFromContract(): Promise<void> {
         round: currentRound,
         card: getCurrentCard()
       });
+      // Start 2-minute timer for reconstructed round
+      resetRoundTimeout();
     }
   } catch (e: any) {
     logger.error({ err: e }, "Failed to sync state from contract");

@@ -101,7 +101,7 @@ async function bootstrap() {
 
   setInterval(() => {
     game
-      .maybeStartGameIfReady(1, 10)
+      .maybeStartGameIfReady(1, 4)
       .catch((e) =>
         logger.error({ err: e }, "maybeStartGameIfReady interval failed")
       );
