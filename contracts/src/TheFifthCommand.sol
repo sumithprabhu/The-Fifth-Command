@@ -133,13 +133,19 @@ contract TheFifthCommand is Ownable {
         uint256 finalPrice
     ) external onlyOwner {
         require(currentGameState == GameState.InProgress, "No active game");
-        require(isCurrentPlayer[winner], "Not a player");
-        require(currentChipBalance[winner] >= finalPrice, "Not enough chips");
-        require(finalPrice > 0, "Invalid price");
         require(currentRound <= currentTotalCards, "All cards done");
 
-        currentChipBalance[winner] -= finalPrice;
-        currentPlayerCards[winner].push(cardId);
+        // Allow skipped cards (no one bid)
+        bool isSkipped = (finalPrice == 0 && winner == address(0));
+
+        if (!isSkipped) {
+            require(currentChipBalance[winner] >= finalPrice, "Not enough chips");
+            require(finalPrice > 0, "Invalid price");
+            require(isCurrentPlayer[winner], "Not a player");
+
+            currentChipBalance[winner] -= finalPrice;
+            currentPlayerCards[winner].push(cardId);
+        }
 
         emit CardSettled(currentGameId, currentRound, cardId, winner, finalPrice);
 

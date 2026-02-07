@@ -84,7 +84,6 @@ contract DeployTheFifthCommand is Script {
         console.log("Game currency token:", address(gameToken));
 
         gameToken.approve(address(gameContract), mintAmount);
-        // gameContract.startGame(5);
         gameContract.joinGame();
 
         vm.stopBroadcast();

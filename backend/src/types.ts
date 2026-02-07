@@ -12,7 +12,7 @@ export interface RawCard {
   description: string;
 }
 
-export type CardType = "allRound" | "attacker" | "defender" | "strategist";
+export type CardType = "sentinel" | "attacker" | "defender" | "strategist";
 
 export interface Card {
   id: number;
@@ -21,7 +21,7 @@ export interface Card {
   type: CardType;
   attack: number;
   defense: number;
-  heal: number;
+  strategist: number;
   raw: RawCard;
 }
 
@@ -78,9 +78,9 @@ export interface PowerComputation {
   power: number;
   valid: boolean;
   breakdown: {
-    attack: number;
-    defense: number;
-    heal: number;
+    attackScore: number;
+    defenseScore: number;
+    strategyScore: number;
   };
 }
 

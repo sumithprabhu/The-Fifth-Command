@@ -18,12 +18,7 @@ function createApp() {
 
   app.use(httpLogger);
   app.use(helmet());
-  app.use(
-    cors({
-      origin: config.corsOrigin === "*" ? true : config.corsOrigin,
-      credentials: true
-    })
-  );
+  app.use(cors());
   app.use(express.json({ limit: "1mb" }));
 
   const limiter = rateLimit({
@@ -101,7 +96,7 @@ async function bootstrap() {
 
   setInterval(() => {
     game
-      .maybeStartGameIfReady(1, 10)
+      .maybeStartGameIfReady(3, 15)
       .catch((e) =>
         logger.error({ err: e }, "maybeStartGameIfReady interval failed")
       );
