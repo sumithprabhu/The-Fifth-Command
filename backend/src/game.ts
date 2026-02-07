@@ -17,6 +17,7 @@ import {
 
 const MIN_INCREMENT = 10; // chips
 const ROUND_TIMEOUT_MS = 120_000; // 2 minutes
+const GAME_START_COUNTDOWN_MS = 3 * 60_000; // 3 minutes
 const BID_MESSAGE_MAX_AGE_MS = 5 * 60_000; // 5 minutes
 
 // EIP-712 typed data
@@ -44,6 +45,10 @@ interface InternalState {
   wonCards: Record<string, Card[]>;
   roundTimeoutHandle: NodeJS.Timeout | null;
   roundTimeoutEndsAt: number | null; // Timestamp when round timeout will trigger
+  gameStartTimeoutHandle: NodeJS.Timeout | null;
+  gameStartTimeoutEndsAt: number | null; // Timestamp when game will start after countdown
+  minPlayersRequired: number; // Tracks the min players requirement
+  waitingPlayers: string[]; // Players who joined while waiting for game start
 }
 
 const state: InternalState = {
@@ -62,7 +67,11 @@ const state: InternalState = {
   usedNonces: {},
   wonCards: {},
   roundTimeoutHandle: null,
-  roundTimeoutEndsAt: null
+  roundTimeoutEndsAt: null,
+  gameStartTimeoutHandle: null,
+  gameStartTimeoutEndsAt: null,
+  minPlayersRequired: 1,
+  waitingPlayers: []
 };
 
 let allCards: Card[] = [];
@@ -108,6 +117,75 @@ function shuffle<T>(array: T[]): T[] {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
+}
+
+function calculateTotalCardsNeeded(playerCount: number): number {
+  // Formula: x = number of teams (players)
+  // Sentinels = x / 2
+  // Attackers = x × 2
+  // Defenders = x × 2
+  // Strategists = x
+  // Total = (x/2) + (x*2) + (x*2) + x = x/2 + 5x = 5.5x
+  // Round up sentinels: ceil(x/2)
+  const sentinels = Math.ceil(playerCount / 2);
+  const attackers = playerCount * 2;
+  const defenders = playerCount * 2;
+  const strategists = playerCount;
+  return sentinels + attackers + defenders + strategists;
+}
+
+function selectCardsByType(totalNeeded: number): Card[] {
+  const all = loadCards();
+  
+  // Calculate how many of each type we need
+  const playerCount = Math.ceil(totalNeeded / 5.5);
+  const sentinelsNeeded = Math.ceil(playerCount / 2); // Approximate distribution
+  const attackersNeeded = playerCount * 2;
+  const defendersNeeded = playerCount * 2;
+  const strategistsNeeded = playerCount;
+  
+  // Group cards by type
+  const byType: Record<string, Card[]> = {
+    sentinel: [],
+    attacker: [],
+    defender: [],
+    strategist: []
+  };
+  
+  for (const card of all) {
+    if (byType[card.type]) {
+      byType[card.type].push(card);
+    }
+  }
+  
+  // Select and shuffle from each type in order
+  const result: Card[] = [];
+  
+  // Add sentinels
+  if (byType.sentinel.length > 0) {
+    const sentinels = shuffle(byType.sentinel).slice(0, sentinelsNeeded);
+    result.push(...sentinels);
+  }
+  
+  // Add attackers
+  if (byType.attacker.length > 0) {
+    const attackers = shuffle(byType.attacker).slice(0, attackersNeeded);
+    result.push(...attackers);
+  }
+  
+  // Add defenders
+  if (byType.defender.length > 0) {
+    const defenders = shuffle(byType.defender).slice(0, defendersNeeded);
+    result.push(...defenders);
+  }
+  
+  // Add strategists
+  if (byType.strategist.length > 0) {
+    const strategists = shuffle(byType.strategist).slice(0, strategistsNeeded);
+    result.push(...strategists);
+  }
+  
+  return result; // Return in sequence: sentinels, attackers, defenders, strategists
 }
 
 async function getChainId(): Promise<number> {
@@ -181,6 +259,14 @@ function resetRoundTimeout() {
       logger.error({ err }, "endRound failed from timeout");
     });
   }, timeoutDuration);
+}
+
+function resetGameStartTimeout(): void {
+  if (state.gameStartTimeoutHandle) {
+    clearTimeout(state.gameStartTimeoutHandle);
+    state.gameStartTimeoutHandle = null;
+  }
+  state.gameStartTimeoutEndsAt = null;
 }
 
 function getCurrentCard(): Card | null {
@@ -489,9 +575,9 @@ async function endGame(): Promise<void> {
 }
 
 async function startNewGame(totalCards: number): Promise<void> {
-  const all = loadCards();
-  const shuffled = shuffle(all);
-  const slice = shuffled.slice(0, totalCards);
+  // Select cards by type order: sentinel, attacker, defender, strategist
+  const selectedCards = selectCardsByType(totalCards);
+  const slice = selectedCards.slice(0, totalCards);
 
   state.gameId += 1;
   state.gameState = "InProgress";
@@ -517,30 +603,62 @@ async function startNewGame(totalCards: number): Promise<void> {
 }
 
 export async function maybeStartGameIfReady(
-  minPlayers = 1,
-  totalCards = 10
+  minPlayers = 1
 ): Promise<void> {
   if (!contractInstance) return;
 
   try {
     const gameStateOnchain = await contractInstance.currentGameState();
-    // const gameStateOnchain = await contractInstance.currentGameState();
-console.log("gameStateOnchain:", gameStateOnchain);
-console.log("typeof gameStateOnchain:", typeof gameStateOnchain);
-console.log("gameStateOnchain value:", gameStateOnchain);
-    console.log(gameStateOnchain);
     if (gameStateOnchain !== 0) return;
 
-    const playerCount = await contractInstance.getCurrentPlayerCount();
-    console.log(playerCount)
-    console.log(playerCount.toNumber())
-    if (playerCount.toNumber() < minPlayers) return;
-    console.log("HLO");
+    const playerCountBN = await contractInstance.getCurrentPlayerCount();
+    const playerCount = playerCountBN.toNumber();
+    
+    state.minPlayersRequired = minPlayers;
+
+    // If min players not met yet, don't start countdown
+    if (playerCount < minPlayers) {
+      resetGameStartTimeout();
+      return;
+    }
+
+    // Min players met, start 3-minute countdown if not already started
+    if (!state.gameStartTimeoutHandle) {
+      const timeoutEndsAt = Date.now() + GAME_START_COUNTDOWN_MS;
+      state.gameStartTimeoutEndsAt = timeoutEndsAt;
+
+      logger.info(
+        { playerCount, minPlayers },
+        "Min players reached, starting 3-minute countdown before game start"
+      );
+
+      state.gameStartTimeoutHandle = setTimeout(() => {
+        executeGameStart().catch((err) => {
+          logger.error({ err }, "executeGameStart failed from timeout");
+        });
+      }, GAME_START_COUNTDOWN_MS);
+    }
+  } catch (e: any) {
+    logger.error({ err: e }, "maybeStartGameIfReady failed");
+  }
+}
+
+async function executeGameStart(): Promise<void> {
+  if (!contractInstance) return;
+
+  resetGameStartTimeout();
+
+  try {
+    const playerCountBN = await contractInstance.getCurrentPlayerCount();
+    const playerCount = playerCountBN.toNumber();
+    const totalCards = calculateTotalCardsNeeded(playerCount);
+
     const tx = await contractInstance.startGame(totalCards);
     logger.info(
       {
         hash: tx.hash,
-        totalCards
+        totalCards,
+        playerCount
       },
       "startGame tx sent"
     );
@@ -549,7 +667,7 @@ console.log("gameStateOnchain value:", gameStateOnchain);
 
     await startNewGame(totalCards);
   } catch (e: any) {
-    logger.error({ err: e }, "maybeStartGameIfReady failed");
+    logger.error({ err: e }, "executeGameStart failed");
   }
 }
 
@@ -576,6 +694,41 @@ async function getAllPlayers(): Promise<string[]> {
     // Fallback: return players we've seen in bids
     return Array.from(state.players);
   }
+}
+
+export async function getGameStartInfo(): Promise<any> {
+  const playerAddresses = await getAllPlayers();
+  const playerInfoList: PlayerInfo[] = [];
+  
+  for (const address of playerAddresses) {
+    try {
+      const chipBalanceBN = await contractInstance!.currentChipBalance(address);
+      const chipBalance = chipBalanceBN.toNumber();
+      
+      playerInfoList.push({
+        address,
+        chipBalance,
+        cardsOwned: 0,
+        cards: []
+      });
+    } catch (e) {
+      logger.warn({ err: e, address }, "Failed to fetch player chip balance");
+    }
+  }
+
+  let gameStartsInSeconds: number | null = null;
+  if (state.gameStartTimeoutEndsAt && state.gameState === "NotStarted") {
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((state.gameStartTimeoutEndsAt - now) / 1000));
+    gameStartsInSeconds = remaining > 0 ? remaining : null;
+  }
+
+  return {
+    status: state.gameStartTimeoutHandle ? "ready" : playerAddresses.length > 0 ? "waiting" : "waiting",
+    playersJoined: playerInfoList,
+    minPlayersRequired: state.minPlayersRequired,
+    gameStartsInSeconds
+  };
 }
 
 export async function getStatus(): Promise<GameStatus> {
@@ -621,6 +774,30 @@ export async function getStatus(): Promise<GameStatus> {
     roundEndsInSeconds = remaining > 0 ? remaining : null;
   }
 
+  // Calculate countdown until game starts
+  let gameStartsInSeconds: number | null = null;
+  if (state.gameStartTimeoutEndsAt && state.gameState === "NotStarted") {
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((state.gameStartTimeoutEndsAt - now) / 1000));
+    gameStartsInSeconds = remaining > 0 ? remaining : null;
+  }
+
+  // Build mapping of cardId -> winner for quick lookup
+  const winnerByCardId: Record<number, string> = {};
+  for (const w of Object.keys(state.wonCards)) {
+    const cards = state.wonCards[w] || [];
+    for (const c of cards) {
+      winnerByCardId[c.id] = w;
+    }
+  }
+
+  const currentIndex = Math.max(0, state.currentCardIndex);
+  const auctionedCards = state.revealedCards
+    .slice(0, currentIndex)
+    .map((c) => ({ card: c, winner: winnerByCardId[c.id] || null }));
+
+  const remainingCards = state.revealedCards.slice(currentIndex);
+
   return {
     gameId: state.gameId,
     gameState: state.gameState,
@@ -630,8 +807,11 @@ export async function getStatus(): Promise<GameStatus> {
     highestBid: getCurrentHighestBidPublic(),
     revealedCards: state.revealedCards,
     players,
-    roundEndsInSeconds
-  };
+    roundEndsInSeconds,
+    gameStartsInSeconds,
+    auctionedCards,
+    remainingCards
+  }; 
 }
 
 export function getCurrentHighestBidPublic(): HighestBidPublic {
@@ -798,11 +978,10 @@ async function syncStateFromContract(): Promise<void> {
       logger.warn({ err: e }, "Failed to query CardSettled events, won cards may be incomplete");
     }
 
-    // For revealedCards, we can't recover the exact order, so we'll create a placeholder
-    // The actual cards will be determined by the current round
-    // We'll use a shuffled list as placeholder (won't affect gameplay since we track by round)
-    const shuffled = shuffle(allCards);
-    state.revealedCards = shuffled.slice(0, totalCards);
+    // For revealedCards, try to select by type order (sentinel, attacker, defender, strategist)
+    // This preserves the requested sequence even after reconstruction.
+    const selected = selectCardsByType(totalCards);
+    state.revealedCards = selected.slice(0, totalCards);
 
     // Reset bid state (can't recover from contract)
     state.highestBid = { amount: 0, bidder: null };

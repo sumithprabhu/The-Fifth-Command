@@ -42,6 +42,19 @@ export function createRoutes() {
     }
   );
 
+  router.get(
+    "/game/start-info",
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      try {
+        const info = await game.getGameStartInfo();
+        res.json(info);
+      } catch (e) {
+        logger.error({ err: e }, "GET /game/start-info failed");
+        next(e);
+      }
+    }
+  );
+
   router.post(
     "/bid/submit",
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
