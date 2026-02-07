@@ -1,7 +1,8 @@
 {
-  "allRound": [
+  "sentinel": [
     {
-      "name": "Sentinel",
+      "characterId": 1000,
+      "name": "Sova",
       "image": "/pandas/sentinel/sentinel_1.png",
       "attack": 6,
       "defense": 6,
@@ -9,6 +10,7 @@
       "description": "A balanced warrior with equal prowess in all combat disciplines."
     },
     {
+      "characterId": 1001,
       "name": "Nexus",
       "image": "/pandas/sentinel/sentinel_2.png",
       "attack": 5,
@@ -17,6 +19,7 @@
       "description": "A versatile fighter capable of adapting to any battlefield situation."
     },
     {
+      "characterId": 1002,
       "name": "Zenith",
       "image": "/pandas/sentinel/sentinel_3.png",
       "attack": 6,
@@ -25,6 +28,7 @@
       "description": "Master of all trades with exceptional versatility in combat."
     },
     {
+      "characterId": 1003,
       "name": "Vortex",
       "image": "/pandas/sentinel/sentinel_4.png",
       "attack": 4,
@@ -33,6 +37,7 @@
       "description": "A struggling warrior still learning the ways of balanced combat."
     },
     {
+      "characterId": 1004,
       "name": "Prime",
       "image": "/pandas/sentinel/sentinel_5.png",
       "attack": 5,
@@ -41,6 +46,7 @@
       "description": "An experienced fighter with well-rounded combat abilities."
     },
     {
+      "characterId": 1005,
       "name": "Core",
       "image": "/pandas/sentinel/sentinel_6.png",
       "attack": 6,
@@ -51,6 +57,7 @@
   ],
   "attacker": [
     {
+      "characterId": 1006,
       "name": "Blade",
       "image": "/pandas/attacker/attacker_1.png",
       "attack": 9,
@@ -59,6 +66,7 @@
       "description": "A fierce warrior whose devastating strikes can break through any defense."
     },
     {
+      "characterId": 1007,
       "name": "Razor",
       "image": "/pandas/attacker/attacker_2.png",
       "attack": 8,
@@ -67,6 +75,7 @@
       "description": "Swift and deadly, this attacker strikes with precision and speed."
     },
     {
+      "characterId": 1008,
       "name": "Fury",
       "image": "/pandas/attacker/attacker_3.png",
       "attack": 9,
@@ -75,6 +84,7 @@
       "description": "Unleashes overwhelming offensive power that crushes opponents."
     },
     {
+      "characterId": 1009,
       "name": "Storm",
       "image": "/pandas/attacker/attacker_4.png",
       "attack": 8,
@@ -83,6 +93,7 @@
       "description": "A relentless force of nature that attacks with unstoppable momentum."
     },
     {
+      "characterId": 1010,
       "name": "Rage",
       "image": "/pandas/attacker/attacker_5.png",
       "attack": 9,
@@ -91,6 +102,7 @@
       "description": "Berserker warrior who sacrifices defense for maximum offensive capability."
     },
     {
+      "characterId": 1011,
       "name": "Strike",
       "image": "/pandas/attacker/attacker_6.png",
       "attack": 8,
@@ -99,6 +111,7 @@
       "description": "Specializes in quick, powerful attacks that catch enemies off guard."
     },
     {
+      "characterId": 1012,
       "name": "Thunder",
       "image": "/pandas/attacker/attacker_7.png",
       "attack": 9,
@@ -107,6 +120,7 @@
       "description": "Lightning-fast attacker who delivers electrifying blows to opponents."
     },
     {
+      "characterId": 1013,
       "name": "Inferno",
       "image": "/pandas/attacker/attacker_8.png",
       "attack": 8,
@@ -115,6 +129,7 @@
       "description": "Burns through enemy lines with fiery determination and power."
     },
     {
+      "characterId": 1014,
       "name": "Crusher",
       "image": "/pandas/attacker/attacker_9.png",
       "attack": 9,
@@ -123,6 +138,7 @@
       "description": "Overwhelming strength that shatters defenses with brute force."
     },
     {
+      "characterId": 1015,
       "name": "Viper",
       "image": "/pandas/attacker/attacker_10.png",
       "attack": 8,
@@ -131,6 +147,7 @@
       "description": "Deadly precision strikes that find weaknesses in any armor."
     },
     {
+      "characterId": 1016,
       "name": "Savage",
       "image": "/pandas/attacker/attacker_11.png",
       "attack": 9,
@@ -139,6 +156,7 @@
       "description": "Wild and unpredictable attacker who fights with primal ferocity."
     },
     {
+      "characterId": 1017,
       "name": "Titan",
       "image": "/pandas/attacker/attacker_12.png",
       "attack": 8,
@@ -147,6 +165,7 @@
       "description": "Massive offensive presence that dominates the battlefield."
     },
     {
+      "characterId": 1018,
       "name": "Wrath",
       "image": "/pandas/attacker/attacker_13.png",
       "attack": 9,
@@ -155,6 +174,7 @@
       "description": "Unleashes devastating attacks fueled by pure anger and determination."
     },
     {
+      "characterId": 1019,
       "name": "Blitz",
       "image": "/pandas/attacker/attacker_14.png",
       "attack": 8,
@@ -163,6 +183,7 @@
       "description": "Lightning-fast strikes that overwhelm enemies before they can react."
     },
     {
+      "characterId": 1020,
       "name": "Havoc",
       "image": "/pandas/attacker/attacker_15.png",
       "attack": 9,
@@ -171,6 +192,7 @@
       "description": "Creates chaos on the battlefield with relentless offensive pressure."
     },
     {
+      "characterId": 1021,
       "name": "Reaper",
       "image": "/pandas/attacker/attacker_16.png",
       "attack": 8,
@@ -181,6 +203,7 @@
   ],
   "defender": [
     {
+      "characterId": 1022,
       "name": "Guardian",
       "image": "/pandas/defender/defender_1.png",
       "attack": 5,
@@ -189,6 +212,7 @@
       "description": "An unbreakable shield that protects allies with unwavering resolve."
     },
     {
+      "characterId": 1023,
       "name": "Fortress",
       "image": "/pandas/defender/defender_2.png",
       "attack": 6,
@@ -197,6 +221,7 @@
       "description": "Impenetrable defense that stands firm against any assault."
     },
     {
+      "characterId": 1024,
       "name": "Bastion",
       "image": "/pandas/defender/defender_3.png",
       "attack": 5,
@@ -205,6 +230,7 @@
       "description": "A strategic defender who uses positioning to protect the team."
     },
     {
+      "characterId": 1025,
       "name": "Shield",
       "image": "/pandas/defender/defender_4.png",
       "attack": 6,
@@ -213,6 +239,7 @@
       "description": "The first line of defense, absorbing damage for those behind."
     },
     {
+      "characterId": 1026,
       "name": "Bulwark",
       "image": "/pandas/defender/defender_5.png",
       "attack": 5,
@@ -221,6 +248,7 @@
       "description": "Massive defensive presence that blocks all incoming threats."
     },
     {
+      "characterId": 1027,
       "name": "Aegis",
       "image": "/pandas/defender/defender_6.png",
       "attack": 6,
@@ -229,6 +257,7 @@
       "description": "Divine protection that shields allies from harm."
     },
     {
+      "characterId": 1028,
       "name": "Rampart",
       "image": "/pandas/defender/defender_7.png",
       "attack": 5,
@@ -237,6 +266,7 @@
       "description": "Strategic defender who controls the battlefield through positioning."
     },
     {
+      "characterId": 1029,
       "name": "Barrier",
       "image": "/pandas/defender/defender_8.png",
       "attack": 6,
@@ -245,6 +275,7 @@
       "description": "Creates an impenetrable wall that enemies cannot breach."
     },
     {
+      "characterId": 1030,
       "name": "Sentinel",
       "image": "/pandas/defender/defender_9.png",
       "attack": 5,
@@ -253,6 +284,7 @@
       "description": "Ever-watchful guardian who never lets threats pass unnoticed."
     },
     {
+      "characterId": 1031,
       "name": "Warden",
       "image": "/pandas/defender/defender_10.png",
       "attack": 6,
@@ -261,6 +293,7 @@
       "description": "Protects the team with tactical awareness and strong defenses."
     },
     {
+      "characterId": 1032,
       "name": "Palisade",
       "image": "/pandas/defender/defender_11.png",
       "attack": 5,
@@ -269,6 +302,7 @@
       "description": "Strategic defender who uses terrain and positioning effectively."
     },
     {
+      "characterId": 1033,
       "name": "Citadel",
       "image": "/pandas/defender/defender_12.png",
       "attack": 6,
@@ -277,6 +311,7 @@
       "description": "A fortress of defense that stands unyielding against all odds."
     },
     {
+      "characterId": 1034,
       "name": "Stronghold",
       "image": "/pandas/defender/defender_13.png",
       "attack": 5,
@@ -285,6 +320,7 @@
       "description": "Unbreakable defensive position that secures the battlefield."
     },
     {
+      "characterId": 1035,
       "name": "Bunker",
       "image": "/pandas/defender/defender_14.png",
       "attack": 6,
@@ -293,6 +329,7 @@
       "description": "Underground defender who protects from fortified positions."
     },
     {
+      "characterId": 1036,
       "name": "Keep",
       "image": "/pandas/defender/defender_15.png",
       "attack": 5,
@@ -303,6 +340,7 @@
   ],
   "strategist": [
     {
+      "characterId": 1037,
       "name": "Sage",
       "image": "/pandas/strategist/strategist_1.png",
       "attack": 6,
@@ -311,6 +349,7 @@
       "description": "Master tactician who outwits enemies with brilliant strategic planning."
     },
     {
+      "characterId": 1038,
       "name": "Oracle",
       "image": "/pandas/strategist/strategist_2.png",
       "attack": 5,
@@ -319,6 +358,7 @@
       "description": "Foresees enemy movements and plans counter-strategies in advance."
     },
     {
+      "characterId": 1039,
       "name": "Mind",
       "image": "/pandas/strategist/strategist_3.png",
       "attack": 6,
@@ -327,6 +367,7 @@
       "description": "Brilliant strategist who thinks several steps ahead of opponents."
     },
     {
+      "characterId": 1040,
       "name": "Genius",
       "image": "/pandas/strategist/strategist_4.png",
       "attack": 5,
@@ -335,6 +376,7 @@
       "description": "Exceptional intellect that devises unbeatable tactical formations."
     },
     {
+      "characterId": 1041,
       "name": "Tactician",
       "image": "/pandas/strategist/strategist_5.png",
       "attack": 6,
@@ -343,6 +385,7 @@
       "description": "Expert planner who coordinates team movements with precision."
     },
     {
+      "characterId": 1042,
       "name": "Mastermind",
       "image": "/pandas/strategist/strategist_6.png",
       "attack": 5,
@@ -351,6 +394,7 @@
       "description": "Brilliant strategist who manipulates the battlefield to advantage."
     },
     {
+      "characterId": 1043,
       "name": "Thinker",
       "image": "/pandas/strategist/strategist_7.png",
       "attack": 6,
@@ -359,6 +403,7 @@
       "description": "Analytical mind that finds optimal solutions to complex problems."
     },
     {
+      "characterId": 1044,
       "name": "Planner",
       "image": "/pandas/strategist/strategist_8.png",
       "attack": 5,
@@ -367,6 +412,7 @@
       "description": "Meticulous strategist who prepares for every possible scenario."
     },
     {
+      "characterId": 1045,
       "name": "Schemer",
       "image": "/pandas/strategist/strategist_9.png",
       "attack": 6,
@@ -375,6 +421,7 @@
       "description": "Cunning planner who sets traps and outmaneuvers enemies."
     },
     {
+      "characterId": 1046,
       "name": "Advisor",
       "image": "/pandas/strategist/strategist_10.png",
       "attack": 5,
@@ -383,6 +430,7 @@
       "description": "Wise counselor who guides the team with strategic wisdom."
     },
     {
+      "characterId": 1047,
       "name": "Intellect",
       "image": "/pandas/strategist/strategist_11.png",
       "attack": 6,
@@ -391,6 +439,7 @@
       "description": "Superior intelligence that dominates through strategic superiority."
     },
     {
+      "characterId": 1048,
       "name": "Analyst",
       "image": "/pandas/strategist/strategist_12.png",
       "attack": 5,
@@ -399,6 +448,7 @@
       "description": "Data-driven strategist who makes decisions based on patterns."
     },
     {
+      "characterId": 1049,
       "name": "Visionary",
       "image": "/pandas/strategist/strategist_13.png",
       "attack": 6,

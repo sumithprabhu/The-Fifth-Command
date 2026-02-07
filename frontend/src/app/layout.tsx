@@ -19,8 +19,8 @@ const orbitron = Orbitron({
 });
 
 export const metadata: Metadata = {
-  title: "Dummy",
-  description: "Dummy NFT Project",
+  title: "The Fifth Command",
+  description: "The Fifth Command NFT Project",
 };
 
 export const viewport = {

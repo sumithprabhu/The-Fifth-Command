@@ -1,9 +1,10 @@
 import Image from "next/image";
+import { memo } from "react";
 import { FaEye } from "react-icons/fa";
 import { GiBroadsword, GiCheckedShield } from "react-icons/gi";
 import { FaStar } from "react-icons/fa";
 
-type CardType = "allRound" | "attacker" | "defender" | "strategist";
+type CardType = "sentinel" | "attacker" | "defender" | "strategist";
 
 interface CharacterCardProps {
   name: string;
@@ -13,9 +14,13 @@ interface CharacterCardProps {
   strategist: number;
   type: CardType;
   description?: string;
+  pointsRequired?: number;
+  isSmall?: boolean;
+  tagPosition?: 'top-right' | 'bottom-center';
+  tagColor?: 'violet' | 'green';
 }
 
-export default function CharacterCard({
+function CharacterCard({
   name,
   characterImage,
   attack,
@@ -23,11 +28,15 @@ export default function CharacterCard({
   strategist,
   type,
   description,
+  pointsRequired,
+  isSmall = false,
+  tagPosition = 'top-right',
+  tagColor = 'violet',
 }: CharacterCardProps) {
   // Get border color based on type
   const getBorderColor = () => {
     switch (type) {
-      case "allRound":
+      case "sentinel":
         return "#FFD700";
       case "attacker":
         return "#EF4444";
@@ -51,22 +60,46 @@ export default function CharacterCard({
         return <GiCheckedShield className="text-white" size={14} />;
       case "strategist":
         return <FaEye className="text-white" size={14} />;
-      case "allRound":
+      case "sentinel":
         return <FaStar className="text-white" size={14} />;
       default:
         return <FaEye className="text-white" size={14} />;
     }
   };
 
+  const primaryColor = "#c28ff3";
+  const tagBgColor = tagColor === 'green' ? '#10B981' : primaryColor;
+  const tagBorderColor = tagColor === 'green' ? '#10B981' : primaryColor;
+  const tagShadowColor = tagColor === 'green' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(194, 143, 243, 0.5)';
+
   return (
     <div 
-      className="relative w-80 rounded-2xl overflow-hidden card-metallic-shine"
+      className="relative w-full rounded-2xl overflow-visible card-metallic-shine flex flex-col"
       style={{
+        aspectRatio: '3 / 5',
         background: 'linear-gradient(to bottom, #000000 0%, #1a0d2e 50%, #2d1b4e 100%)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.8)',
+        boxShadow: isSmall ? '0 2px 8px rgba(0, 0, 0, 0.4)' : '0 8px 32px rgba(0, 0, 0, 0.8)',
         border: `6px solid ${borderColor}`,
       }}
     >
+      {/* Price Tag */}
+      {pointsRequired !== undefined && (
+        <div 
+          className={`absolute z-20 rounded-full ${tagPosition === 'bottom-center' ? 'left-1/2 transform -translate-x-1/2' : '-top-2 -right-2'}`}
+          style={{
+            backgroundColor: tagBgColor,
+            border: `2px solid ${tagBorderColor}`,
+            boxShadow: `0 2px 8px ${tagShadowColor}`,
+            bottom: tagPosition === 'bottom-center' ? '20px' : 'auto',
+            padding: isSmall ? '6px 12px' : '4px 8px',
+            fontSize: isSmall ? '1.75rem' : '0.75rem',
+          }}
+        >
+          <span className="text-white font-bold" style={{ fontSize: isSmall ? '1.75rem' : '0.75rem' }}>
+            {pointsRequired} pts
+          </span>
+        </div>
+      )}
       {/* Metallic overlay */}
       <div 
         className="absolute inset-0 pointer-events-none opacity-30"
@@ -93,12 +126,13 @@ export default function CharacterCard({
       </div>
 
       {/* Character Image Section */}
-      <div className="relative px-4 pb-4 z-10">
+      <div className="relative px-4 pb-4 z-10 flex-1 flex flex-col">
         <div 
-          className="relative w-full aspect-square rounded-xl overflow-hidden"
+          className="relative w-full flex-1 rounded-xl overflow-hidden"
           style={{
             border: `4px solid ${borderColor}`,
             boxShadow: `0 4px 16px ${borderColor}60`,
+            minHeight: 0
           }}
         >
           <div className="absolute inset-0">
@@ -113,7 +147,8 @@ export default function CharacterCard({
             src={characterImage}
             alt={name}
             fill
-            className="object-contain relative z-10"
+            className="object-contain relative z-10 block"
+            style={{ display: 'block' }}
           />
         </div>
       </div>
@@ -164,3 +199,5 @@ export default function CharacterCard({
     </div>
   );
 }
+
+export default memo(CharacterCard);

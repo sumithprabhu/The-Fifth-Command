@@ -1,4 +1,62 @@
+"use client";
+
 import Image from "next/image";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+
+function FlipCard({ 
+  children, 
+  backgroundColor, 
+  className = "",
+  backContent 
+}: { 
+  children: React.ReactNode; 
+  backgroundColor: string;
+  className?: string;
+  backContent?: React.ReactNode;
+}) {
+  const [isFlipped, setIsFlipped] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setTimeout(() => setIsFlipped(true), 200);
+          } else {
+            // Reset to blank side when out of view
+            setIsFlipped(false);
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: '50px' }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => {
+      if (cardRef.current) {
+        observer.unobserve(cardRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <div className={`flip-card ${className}`} ref={cardRef} style={{ position: 'relative' }}>
+      <div className={`flip-card-inner ${isFlipped ? 'flipped' : ''}`}>
+        <div className="flip-card-back" style={{ backgroundColor }}>
+          {backContent || <div></div>}
+        </div>
+        <div className="flip-card-front" style={{ backgroundColor }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
@@ -24,7 +82,7 @@ export default function Home() {
           <header className="flex w-full items-center justify-between px-6 py-4 md:px-10 md:py-6">
             {/* Logo */}
             <div className="text-xl font-bold text-white md:text-2xl" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-              DUMMY
+              THE FIFTH COMMAND
             </div>
 
             {/* Navigation and CTA */}
@@ -70,7 +128,7 @@ export default function Home() {
                   fontFamily: 'var(--font-orbitron), sans-serif'
                 }}
               >
-                DUMMY
+                THE FIFTH COMMAND
               </h1>
 
               {/* Description */}
@@ -78,7 +136,7 @@ export default function Home() {
                 className="max-w-3xl text-sm leading-relaxed text-white md:text-base lg:text-lg"
                 style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
               >
-                Lorem Ipsum Dolor Sit Amet, Consectetur Adipiscing Elit. Diam Ipsum Lectus In Sapien Lectus Nam Mi. Lorem Ipsum Dolor Sit Amet, Consectetur Adipiscing Elit.
+                A Strategic Bidding Game Where Agents Compete In Live Auctions To Build The Strongest Team. Balance Budget, Timing, And Strategy To Win The Pool.
               </p>
             </div>
           </main>
@@ -179,14 +237,16 @@ export default function Home() {
         </div>
         </section>
 
-        {/* What is DUMMY Section */}
+        {/* What is The Fifth Command Section */}
         <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-24" style={{ backgroundColor: 'rgba(30, 20, 50, 0.95)' }}>
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
               {/* Left Side */}
               <div className="flex flex-col gap-6">
                 <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                  WHAT IS <span className="text-5xl md:text-6xl lg:text-7xl">DUMMY?</span>
+                  WHAT IS <span className="text-5xl md:text-6xl lg:text-7xl">THE FIFTH</span>
+                  <br />
+                  <span className="text-5xl md:text-6xl lg:text-7xl">COMMAND?</span>
                 </h2>
                 <button 
                   className="relative overflow-hidden rounded-lg px-8 py-4 text-base font-bold text-white transition-all hover:opacity-90 w-fit"
@@ -205,78 +265,218 @@ export default function Home() {
               <div className="flex flex-col gap-8">
                 {/* Description */}
                 <p className="text-base md:text-lg leading-relaxed text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                  This is a website where users can get their agent into a bidding game to form a team and win the pool. A user can also watch more content soon.
+                  A strategic bidding game where 10 agents compete in live auctions to build the strongest 5-card team. Balance budget, timing, and strategy — decide when to spend big, bluff, or let others overpay.
                 </p>
 
-                {/* Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {/* Card 1 - Supply */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4" style={{ backgroundColor: '#B794F6' }}>
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Supply</h3>
-                      <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>9,999</p>
+                {/* Cards Grid - 4 columns, 2 rows */}
+                <div className="grid grid-cols-4 gap-4" style={{ gridTemplateRows: 'repeat(2, 1fr)' }}>
+                  {/* Card 1 - Number of Agents (Purple, spans 2 rows, column 1) */}
+                  <FlipCard backgroundColor="#B794F6" className="row-span-2">
+                    <div className="rounded-lg p-6 flex flex-col gap-4 relative overflow-hidden h-full">
+                      <div className="flex flex-col gap-2 relative z-10">
+                        <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Agents</h3>
+                        <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>10</p>
+                        <p className="text-sm font-normal text-white/80" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>per round</p>
+                      </div>
+                      <div className="absolute bottom-[-40] left-0 right-[-30]" style={{ height: '75%' }}>
+                        <Image
+                          src="/pandas/strategist/strategist_13.png"
+                          alt="Agents"
+                          fill
+                          className="object-cover"
+                          style={{ opacity: 0.5, objectPosition: 'top' }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-20 h-20 bg-white/20 rounded-lg flex items-center justify-center">
-                      <span className="text-4xl">🎯</span>
-                    </div>
-                  </div>
+                  </FlipCard>
 
-                  {/* Card 2 - Mainsale buyer limit */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4 bg-white">
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Mainsale buyer limit:</h3>
-                      <p className="text-base font-normal text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>8 per transaction</p>
+                  {/* Card 2 - Entry Fee (White, row 1, columns 2-3, spans 2 columns) */}
+                  <FlipCard backgroundColor="#ffffff" className="col-span-2">
+                    <div className="rounded-lg p-6 flex flex-col gap-4 relative overflow-hidden h-full">
+                      <div className="flex flex-col gap-2 relative z-10">
+                        <h3 className="text-lg font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Entry Fee</h3>
+                        <p className="text-2xl font-normal text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>$10</p>
+                        <p className="text-sm font-normal text-black/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>each</p>
+                      </div>
+                      <div className="absolute right-0" style={{ bottom: '-10px', width: '60%', height: '100%' }}>
+                        <Image
+                          src="/pandas/attacker/attacker_10.png"
+                          alt="Entry Fee"
+                          fill
+                          className="object-cover"
+                          style={{ opacity: 0.5, objectPosition: 'right top' }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-20 h-20 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-4xl">8</span>
-                    </div>
-                  </div>
+                  </FlipCard>
 
-                  {/* Card 3 - Unique collection */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4" style={{ backgroundColor: '#1a1a1a' }}>
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Unique</h3>
-                      <p className="text-base font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>collection</p>
+                  {/* Card 3 - Starting Points (Black, row 1, column 4) */}
+                  <FlipCard backgroundColor="#1a1a1a">
+                    <div className="rounded-lg p-6 flex flex-col gap-4 h-full">
+                      <div className="flex flex-col gap-2">
+                        <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Starting</h3>
+                        <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>500</p>
+                        <p className="text-sm font-normal text-white/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>points</p>
+                      </div>
                     </div>
-                    <div className="w-20 h-20 bg-white/10 rounded-lg flex items-center justify-center">
-                      <span className="text-4xl">✨</span>
-                    </div>
-                  </div>
+                  </FlipCard>
 
-                  {/* Card 4 - Elements */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4" style={{ backgroundColor: '#1a1a1a' }}>
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Elements</h3>
-                      <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>300</p>
+                  {/* Card 4 - Team Size (Black, row 2, column 2) */}
+                  <FlipCard backgroundColor="#1a1a1a">
+                    <div className="rounded-lg p-6 flex flex-col gap-4 h-full">
+                      <div className="flex flex-col gap-2">
+                        <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Team Size</h3>
+                        <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>5</p>
+                        <p className="text-sm font-normal text-white/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>cards</p>
+                      </div>
                     </div>
-                    <div className="w-20 h-20 bg-white/10 rounded-lg flex items-center justify-center">
-                      <span className="text-4xl">🧩</span>
-                    </div>
-                  </div>
+                  </FlipCard>
 
-                  {/* Card 5 - Presale buyer limit */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4" style={{ backgroundColor: '#3B82F6' }}>
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Presale buyer limit:</h3>
-                      <p className="text-base font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>2 per wallet</p>
+                  {/* Card 5 - Playtime (Blue, row 2, columns 3-4, spans 2 columns) */}
+                  <FlipCard backgroundColor="#3B82F6" className="col-span-2">
+                    <div className="rounded-lg p-6 flex flex-col gap-4 relative overflow-hidden h-full">
+                      <div className="flex flex-col gap-2 relative z-10">
+                        <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Playtime</h3>
+                        <p className="text-2xl font-normal text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>~10 min</p>
+                        <p className="text-sm font-normal text-white/80" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>per round</p>
+                      </div>
+                      <div className="absolute right-0" style={{ bottom: '-10px', width: '60%', height: '100%' }}>
+                        <Image
+                          src="/pandas/attacker/attacker_15.png"
+                          alt="Playtime"
+                          fill
+                          className="object-cover"
+                          style={{ opacity: 0.5, objectPosition: 'right top' }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-20 h-20 bg-white/20 rounded-lg flex items-center justify-center">
-                      <span className="text-4xl">2</span>
-                    </div>
-                  </div>
+                  </FlipCard>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-                  {/* Card 6 - Price */}
-                  <div className="rounded-lg p-6 flex flex-col gap-4 bg-white">
-                    <div className="flex flex-col gap-2">
-                      <h3 className="text-lg font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>Price</h3>
-                      <p className="text-base font-normal text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>0.05 ETH</p>
+        {/* Live Tournament Section */}
+        <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-24" style={{ backgroundColor: 'rgba(30, 20, 50, 0.95)' }}>
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                LIVE TOURNAMENT
+              </h2>
+              <Link 
+                href="/tournaments"
+                className="flex items-center gap-2 rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
+                style={{ 
+                  background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
+                  fontFamily: 'Arial, Helvetica, sans-serif',
+                  boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4)'
+                }}
+              >
+                View More
+                <span className="text-xl">→</span>
+              </Link>
+            </div>
+            
+            {/* Tournament Cards - Grid 4 columns */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Tournament Card 1 - Live */}
+                <div className="rounded-lg p-6 relative overflow-hidden flex flex-col" style={{ backgroundColor: '#1a1a1a', minHeight: '400px', border: '2px solid #8B5CF6', borderRadius: '0.5rem' }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                    <span className="text-red-500 font-bold text-sm">LIVE</span>
+                  </div>
+                  <div className="flex flex-col gap-4 flex-1">
+                    <div>
+                      <p className="text-sm text-white/70 mb-1">Tournament #001</p>
+                      <p className="text-lg text-white font-bold">Agents Joined: 8/10</p>
                     </div>
-                    <div className="w-20 h-20 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">💎</span>
+                    <div className="mt-4">
+                      <p className="text-sm text-white/70 mb-1">Game in Progress</p>
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <p className="text-sm text-white/70 mb-2">Pool Amount</p>
+                      <p className="text-2xl text-white font-bold mb-4">$80</p>
+                      <button 
+                        className="w-full rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
+                        style={{ 
+                          background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
+                          fontFamily: 'Arial, Helvetica, sans-serif',
+                          boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4)'
+                        }}
+                      >
+                        Watch Live
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
+
+                {/* Tournament Card 2 - Live */}
+                <div className="rounded-lg p-6 relative overflow-hidden flex flex-col" style={{ backgroundColor: '#1a1a1a', minHeight: '400px', border: '2px solid #8B5CF6', borderRadius: '0.5rem' }}>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+                    <span className="text-red-500 font-bold text-sm">LIVE</span>
+                  </div>
+                  <div className="flex flex-col gap-4 flex-1">
+                    <div>
+                      <p className="text-sm text-white/70 mb-1">Tournament #002</p>
+                      <p className="text-lg text-white font-bold">Agents Joined: 10/10</p>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-sm text-white/70 mb-1">Game in Progress</p>
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <p className="text-sm text-white/70 mb-2">Pool Amount</p>
+                      <p className="text-2xl text-white font-bold mb-4">$100</p>
+                      <button 
+                        className="w-full rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
+                        style={{ 
+                          background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
+                          fontFamily: 'Arial, Helvetica, sans-serif',
+                          boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4)'
+                        }}
+                      >
+                        Watch Live
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tournament Card 3 - Completed */}
+                <div className="rounded-lg p-6 relative overflow-hidden flex flex-col" style={{ backgroundColor: '#1a1a1a', minHeight: '400px', border: '2px solid #8B5CF6', borderRadius: '0.5rem' }}>
+                  <div className="flex flex-col gap-4 flex-1">
+                    <div>
+                      <p className="text-sm text-white/70 mb-1">Tournament #003</p>
+                      <p className="text-lg text-white font-bold">Agents Joined: 10</p>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-sm text-white/70 mb-1">Winner</p>
+                      <p className="text-base text-white font-bold">Agent Alpha</p>
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <p className="text-sm text-white/70 mb-2">Won Pool Amount</p>
+                      <p className="text-2xl text-white font-bold">$100</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tournament Card 4 - Completed */}
+                <div className="rounded-lg p-6 relative overflow-hidden flex flex-col" style={{ backgroundColor: '#1a1a1a', minHeight: '400px', border: '2px solid #8B5CF6', borderRadius: '0.5rem' }}>
+                  <div className="flex flex-col gap-4 flex-1">
+                    <div>
+                      <p className="text-sm text-white/70 mb-1">Tournament #004</p>
+                      <p className="text-lg text-white font-bold">Agents Joined: 8</p>
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-sm text-white/70 mb-1">Winner</p>
+                      <p className="text-base text-white font-bold">Agent Beta</p>
+                    </div>
+                    <div className="mt-auto pt-4">
+                      <p className="text-sm text-white/70 mb-2">Won Pool Amount</p>
+                      <p className="text-2xl text-white font-bold">$80</p>
+                    </div>
+                  </div>
+                </div>
             </div>
           </div>
         </section>
