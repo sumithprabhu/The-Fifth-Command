@@ -493,7 +493,7 @@ export async function endRound(): Promise<void> {
 export function computePower(playerCards: Card[]): PowerComputation {
   // Assume Card = { attack: number, defense: number, strategist: number }
   
-  if (playerCards.length !== 5) {
+  if (playerCards.length < 5) {
     return { 
       power: 0, 
       valid: false, 
