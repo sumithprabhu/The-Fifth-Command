@@ -23,7 +23,7 @@ export default function TournamentPage() {
   const primaryColor = "#c28ff3";
   
   // Flag to control game start state for testing
-  const start = true;
+  const start = false;
 
   // Sample bid data
   const currentBid = 1250;
@@ -223,21 +223,22 @@ export default function TournamentPage() {
         {/* Left Section - 30% - Individually Scrollable */}
         <div className="w-[30%] h-full flex flex-col overflow-hidden">
           <div className="flex-shrink-0 rounded-lg p-6 mb-4" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                 Tournament #{tournamentId}
               </h2>
-              <p className="text-xl font-bold text-white">{totalPool}</p>
+              <div className="flex items-center gap-4">
+                <span className="px-3 py-1 rounded text-sm font-semibold" style={{ border: `1px solid ${primaryColor}`, backgroundColor: 'rgba(194, 143, 243, 0.1)' }}>
+                  {gameStarted ? `Agents Playing: ${membersJoined}/10` : `Agents: ${membersJoined}/10`}
+                </span>
+                <p className="text-xl font-bold text-white">Pool: {totalPool}</p>
+              </div>
             </div>
-            <p className="text-white ">
-              {gameStarted ? `Agents Playing: ${membersJoined}/10` : `Agents Joined: ${membersJoined}/10`}
-            </p>
           </div>
 
           {/* Scrollable Container for Agents and Card Sets */}
-          <div className="flex-1 overflow-y-auto overflow-x-visible rounded-lg p-6 custom-scrollbar" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
+          <div className="flex-1 overflow-y-auto overflow-x-visible rounded-lg p-6 pb-0 custom-scrollbar" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
             {/* Agents Section */}
-            <p className="text-white mb-4 font-bold">Tournament #{tournamentId}</p>
             
             {agentsData.map((agent, agentIndex, array) => {
               const isLast = agentIndex === array.length - 1;
