@@ -43,6 +43,7 @@ interface InternalState {
   bidLogs: Record<number, Record<number, BidEntry[]>>;
   usedNonces: Record<string, Set<string>>;
   wonCards: Record<string, Card[]>;
+  cardPrices: Record<number, number>; // cardId -> chips paid
   roundTimeoutHandle: NodeJS.Timeout | null;
   roundTimeoutEndsAt: number | null; // Timestamp when round timeout will trigger
   gameStartTimeoutHandle: NodeJS.Timeout | null;
@@ -66,6 +67,7 @@ const state: InternalState = {
   bidLogs: {},
   usedNonces: {},
   wonCards: {},
+  cardPrices: {},
   roundTimeoutHandle: null,
   roundTimeoutEndsAt: null,
   gameStartTimeoutHandle: null,
@@ -436,6 +438,10 @@ export async function endRound(): Promise<void> {
   if (winner && finalPrice > 0) {
     if (!state.wonCards[winner]) state.wonCards[winner] = [];
     state.wonCards[winner].push(currentCard);
+    state.cardPrices[currentCard.id] = finalPrice;
+  } else if (!winner || finalPrice === 0) {
+    // Card not sold, price is 0
+    state.cardPrices[currentCard.id] = 0;
   }
 
   try {
@@ -574,12 +580,12 @@ async function endGame(): Promise<void> {
   }
 }
 
-async function startNewGame(totalCards: number): Promise<void> {
+async function startNewGame(gameIdFromContract: number, totalCards: number): Promise<void> {
   // Select cards by type order: sentinel, attacker, defender, strategist
   const selectedCards = selectCardsByType(totalCards);
   const slice = selectedCards.slice(0, totalCards);
 
-  state.gameId += 1;
+  state.gameId = gameIdFromContract;
   state.gameState = "InProgress";
   state.totalCards = totalCards;
   state.currentRound = 1;
@@ -589,6 +595,7 @@ async function startNewGame(totalCards: number): Promise<void> {
   state.bidLogs[state.gameId] = {};
   state.wonCards = {};
   state.usedNonces = {};
+  state.cardPrices = {};
 
   if (ioInstance) {
     ioInstance.emit("gameStarted", {
@@ -665,7 +672,11 @@ async function executeGameStart(): Promise<void> {
     await tx.wait();
     logger.info({ hash: tx.hash }, "startGame tx confirmed");
 
-    await startNewGame(totalCards);
+    // Fetch the gameId from contract after game starts
+    const gameIdBN = await contractInstance.currentGameId();
+    const gameId = gameIdBN.toNumber();
+
+    await startNewGame(gameId, totalCards);
   } catch (e: any) {
     logger.error({ err: e }, "executeGameStart failed");
   }
@@ -751,11 +762,17 @@ export async function getStatus(): Promise<GameStatus> {
           const chipBalance = chipBalanceBN.toNumber();
           const cards = state.wonCards[address] || [];
           
+          // Add price information to each card
+          const cardsWithPrice = cards.map(c => ({
+            ...c,
+            priceBought: state.cardPrices[c.id] || 0
+          }));
+          
           players.push({
             address,
             chipBalance,
             cardsOwned: cards.length,
-            cards
+            cards: cardsWithPrice
           });
         } catch (e) {
           logger.warn({ err: e, address }, "Failed to fetch player details");
@@ -794,7 +811,11 @@ export async function getStatus(): Promise<GameStatus> {
   const currentIndex = Math.max(0, state.currentCardIndex);
   const auctionedCards = state.revealedCards
     .slice(0, currentIndex)
-    .map((c) => ({ card: c, winner: winnerByCardId[c.id] || null }));
+    .map((c) => ({ 
+      card: c, 
+      winner: winnerByCardId[c.id] || null,
+      pricePaid: state.cardPrices[c.id] || 0
+    }));
 
   const remainingCards = state.revealedCards.slice(currentIndex);
 

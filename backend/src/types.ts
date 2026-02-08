@@ -49,7 +49,7 @@ export interface PlayerInfo {
   address: string;
   chipBalance: number;
   cardsOwned: number;
-  cards: Card[];
+  cards: Array<Card & { priceBought?: number }>; // Include price paid for each card
 }
 
 export interface GameStatus {
@@ -82,6 +82,7 @@ export interface HighestBidPublic {
 export interface AuctionedCard {
   card: Card;
   winner: string | null;
+  pricePaid: number; // chips paid for this card (0 if unsold)
 }
 
 export interface GameEngineDeps {

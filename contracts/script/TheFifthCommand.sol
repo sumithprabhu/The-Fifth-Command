@@ -67,13 +67,13 @@ contract DeployTheFifthCommand is Script {
         // ────────────────────────────────────────────────────────────────
         // 1. Deploy the ERC-20 token
         // ────────────────────────────────────────────────────────────────
-        TestGameToken gameToken = new TestGameToken();
+        TestGameToken gameToken = TestGameToken(0x7B12a46F66E8b54a7eF6715236FC6475946f1873);
         console.log("TestGameToken deployed at:", address(gameToken));
 
         // Mint 1,000,000 tokens to the deployer (msg.sender)
         uint256 mintAmount = 1_000_000 * 10**18;
-        gameToken.mint(mintAmount);
-        console.log("Minted %s tokens to %s", mintAmount, msg.sender);
+        // gameToken.mint(mintAmount);
+        // console.log("Minted %s tokens to %s", mintAmount, msg.sender);
 
         // ────────────────────────────────────────────────────────────────
         // 2. Deploy TheFifthCommand with the token as currency
