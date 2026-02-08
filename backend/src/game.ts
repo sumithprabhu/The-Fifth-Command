@@ -289,87 +289,74 @@ async function validateBid(
     throw new Error("Contract not initialized");
   }
 
-  // const now = Date.now();
-  // const msgTs = Number(message.timestamp);
-  // if (Number.isNaN(msgTs)) {
-  //   throw new Error("Invalid timestamp");
-  // }
-  // if (Math.abs(now - msgTs) > BID_MESSAGE_MAX_AGE_MS) {
-  //   throw new Error("Bid message too old");
-  // }
+  const {
+    gameId: msgGameId,
+    round: msgRound,
+    cardId: msgCardId,
+    bidder,
+    amount: msgAmount
+  } = message;
 
-  // const domain = await getBidDomain();
-  // const types = getBidTypes();
+  // Basic type & range checks
+  const gameIdNum = Number(msgGameId);
+  const roundNum = Number(msgRound);
+  const cardIdNum = Number(msgCardId);
+  const amountNum = Number(msgAmount);
 
-  // let recovered: string;
-  // try {
-  //   recovered = ethers.utils.verifyTypedData(
-  //     domain,
-  //     types as any,
-  //     message,
-  //     signature
-  //   );
-  // } catch (e: any) {
-  //   logger.error({ err: e }, "verifyTypedData failed");
-  //   throw new Error("Invalid signature");
-  // }
-
-  // if (recovered.toLowerCase() !== String(message.bidder || "").toLowerCase()) {
-  //   throw new Error("Signature does not match bidder");
-  // }
-
-  if (state.gameState !== "InProgress") {
-    throw new Error("Game is not in progress");
+  if (!Number.isFinite(gameIdNum) || !Number.isFinite(roundNum) ||
+      !Number.isFinite(cardIdNum) || !Number.isFinite(amountNum) ||
+      amountNum <= 0) {
+    throw new Error("Invalid bid parameters");
   }
-  if (Number(message.gameId) !== state.gameId) {
-    throw new Error("Invalid gameId for current game");
+
+  // Must be for current game / round / card
+  if (gameIdNum !== state.gameId) {
+    throw new Error("Wrong gameId");
   }
-  if (Number(message.round) !== state.currentRound) {
-    throw new Error("Invalid round");
+  if (roundNum !== state.currentRound) {
+    throw new Error("Wrong round");
   }
 
   const currentCard = getCurrentCard();
-  if (!currentCard || Number(message.cardId) !== currentCard.id) {
-    throw new Error("Invalid cardId for this round");
+  if (!currentCard || cardIdNum !== currentCard.id) {
+    throw new Error("Wrong cardId");
   }
 
-  const bidder = message.bidder.toLowerCase();
-  // const nonce = String(message.nonce);
-  // if (!state.usedNonces[bidder]) {
-  //   state.usedNonces[bidder] = new Set();
-  // }
-  // if (state.usedNonces[bidder].has(nonce)) {
-  //   throw new Error("Nonce already used");
-  // }
-
-  const amount = Number(message.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error("Invalid bid amount");
+  // Amount must be higher
+  if (amountNum <= state.highestBid.amount) {
+    throw new Error("Bid must be higher than current highest");
   }
 
-  if (amount < state.highestBid.amount) {
-    throw new Error(
-      `Bid must be higher than current highest`
-    );
+  // Check chips on-chain
+  const chipBalance = await contractInstance.currentChipBalance(bidder);
+  if (chipBalance.lt(ethers.BigNumber.from(amountNum))) {
+    throw new Error("Insufficient chips");
   }
 
-  let chipBalance: BigNumber;
+  // Verify plain ECDSA signature
+  const messageHash = ethers.utils.keccak256(
+    ethers.utils.solidityPack(
+      ["uint256", "uint256", "uint256", "address", "uint256"],
+      [gameIdNum, roundNum, cardIdNum, bidder, amountNum]
+    )
+  );
+
+  let recovered: string;
   try {
-    chipBalance = await contractInstance.currentChipBalance(bidder);
-  } catch (e: any) {
-    logger.error({ err: e }, "currentChipBalance call failed");
-    throw new Error("Unable to verify chip balance");
+    recovered = ethers.utils.recoverAddress(messageHash, signature);
+  } catch (e) {
+    logger.error({ err: e }, "Signature recovery failed");
+    throw new Error("Invalid signature");
   }
 
-  if (chipBalance.lt(ethers.BigNumber.from(amount))) {
-    throw new Error("Insufficient chips for this bid");
+  if (recovered.toLowerCase() !== bidder.toLowerCase()) {
+    throw new Error("Signature does not match bidder");
   }
 
-  // state.usedNonces[bidder].add(nonce);
-
+  // All checks passed
   return {
-    bidder,
-    amount
+    bidder: bidder.toLowerCase(),
+    amount: amountNum
   };
 }
 
@@ -385,8 +372,6 @@ export async function handleBid(
   const bidEntry: BidEntry = {
     bidder,
     amount,
-    timestamp: Number(message.timestamp),
-    nonce: String(message.nonce),
     cardId: Number(message.cardId),
     gameId: state.gameId,
     round: state.currentRound

@@ -192,8 +192,6 @@ contract TheFifthCommand is Ownable {
     // gameId increments here
     // ────────────────────────────────────────────────────────────────
     function finalizeGame(address winner) external onlyOwner {
-        require(currentGameState == GameState.Finished, "Game not finished");
-
         uint256 payout = currentTotalPot;
 
         address recipient = address(0);

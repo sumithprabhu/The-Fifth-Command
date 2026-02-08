@@ -31,15 +31,11 @@ export interface BidMessage {
   round: number;
   cardId: number;
   amount: number;
-  timestamp: number;
-  nonce: number;
 }
 
 export interface BidEntry {
   bidder: string;
   amount: number;
-  timestamp: number;
-  nonce: string;
   cardId: number;
   gameId: number;
   round: number;
