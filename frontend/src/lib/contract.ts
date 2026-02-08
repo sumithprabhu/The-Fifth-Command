@@ -279,7 +279,8 @@ export async function getPlayersFromEvents(gameId: number): Promise<string[]> {
     // Extract unique player addresses
     const players = new Set<string>();
     events.forEach((event) => {
-      if (event.args && event.args.length >= 2) {
+      // Check if event is EventLog (has args property)
+      if ('args' in event && event.args && event.args.length >= 2) {
         // event.args[0] is gameId, event.args[1] is player address
         const player = event.args[1] as string;
         if (player && player !== ethers.ZeroAddress) {
@@ -316,7 +317,8 @@ export async function getGameFinalizedEvent(gameId: number): Promise<GameFinaliz
     if (events.length > 0) {
       // Get the most recent event (last one)
       const event = events[events.length - 1];
-      if (event.args && event.args.length >= 4) {
+      // Check if event is EventLog (has args property)
+      if ('args' in event && event.args && event.args.length >= 4) {
         // event.args[0] is gameId, event.args[1] is winner, event.args[2] is potPaid, event.args[3] is potCarriedOver
         return {
           gameId: event.args[0] as bigint,
