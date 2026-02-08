@@ -49,7 +49,7 @@ export interface PlayerInfo {
   address: string;
   chipBalance: number;
   cardsOwned: number;
-  cards: Card[];
+  cards: Array<Card & { priceBought?: number }>; // Include price paid for each card
 }
 
 export interface GameStatus {
@@ -62,11 +62,27 @@ export interface GameStatus {
   revealedCards: Card[];
   players: PlayerInfo[];
   roundEndsInSeconds: number | null; // Seconds until round ends, null if no timeout set
+  gameStartsInSeconds: number | null; // Seconds until game starts (when waiting for min players), null if game is running or not scheduled
+  auctionedCards: AuctionedCard[];
+  remainingCards: Card[];
+}
+
+export interface GameStartInfo {
+  status: "waiting" | "ready" | "started";
+  playersJoined: PlayerInfo[];
+  minPlayersRequired: number;
+  gameStartsInSeconds: number | null; // Null if no countdown active
 }
 
 export interface HighestBidPublic {
   amount: number;
   bidder: string | null;
+}
+
+export interface AuctionedCard {
+  card: Card;
+  winner: string | null;
+  pricePaid: number; // chips paid for this card (0 if unsold)
 }
 
 export interface GameEngineDeps {
