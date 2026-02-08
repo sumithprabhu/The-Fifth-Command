@@ -9,8 +9,8 @@ import Marquee from "react-fast-marquee";
 import SlotCounter from "react-slot-counter";
 import confetti from "canvas-confetti";
 import { ethers } from "ethers";
-import { getGameStatus, getGameStartInfo, GameStartInfo } from "@/lib/api";
-import { getCurrentGameId, getPlayersFromEvents, getGameFinalizedEvent } from "@/lib/contract";
+import { getGameStatus, getGameStartInfo, GameStartInfo, getBidLog } from "@/lib/api";
+import { getCurrentGameId, getPlayersFromEvents, getGameFinalizedEvent, getPastGamesCount, getPastGame, getAllPastGames } from "@/lib/contract";
 import { useRouter } from "next/navigation";
 
 interface GameStatus {
@@ -52,10 +52,20 @@ export default function TournamentPage() {
   const [loading, setLoading] = useState(true);
   const [openSets, setOpenSets] = useState<string[]>([]);
   const [openAgents, setOpenAgents] = useState<string[]>([]);
-  const [winnerDeclared, setWinnerDeclared] = useState(false);
+  // winnerDeclared stores the gameId once winner is declared - NEVER resets to allow showing winner modal
+  const [winnerDeclared, setWinnerDeclared] = useState<{ declared: boolean; gameId: number | null }>({ declared: false, gameId: null });
   const [winnerData, setWinnerData] = useState<{ address: string; poolAmount: string } | null>(null);
   const confettiTriggered = useRef(false);
   const winnerPollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [currentRoundBids, setCurrentRoundBids] = useState<any[]>([]);
+  const [bidPlacedItems, setBidPlacedItems] = useState<any[]>([]); // Store bid placed items for ticker
+  const previousBidAmount = useRef<number>(0);
+  const previousRound = useRef<number>(0);
+  // Store finished game state to prevent reset until contract confirms
+  const [finishedGameState, setFinishedGameState] = useState<{ gameStatus: GameStatus; gameId: number } | null>(null);
+  const [waitingForContractConfirmation, setWaitingForContractConfirmation] = useState(false);
+  const shouldStopPolling = useRef(false); // Ref to track if we should stop polling
   const [chatMessages, setChatMessages] = useState([
     { id: 1, user: "Agent Alpha", message: "Good luck everyone!" },
     { id: 2, user: "Agent Beta", message: "Let's go!" },
@@ -63,16 +73,37 @@ export default function TournamentPage() {
 
   const primaryColor = "#c28ff3";
   
-  // Fetch game status from API and currentGameId from contract
+  // MAIN POLLING: Fetch game status from API and currentGameId from contract
+  // This ONLY runs when NOT waiting for winner confirmation
   useEffect(() => {
     // Skip API fetch if isGameStarted toggle is true (using dummy data)
     if (isGameStarted) {
+      shouldStopPolling.current = false;
       return;
     }
     
+    // COMPLETELY STOP if we're waiting for winner confirmation
+    if (waitingForContractConfirmation) {
+      shouldStopPolling.current = true;
+      return;
+    }
+    
+    // Reset stop flag
+    shouldStopPolling.current = false;
+    
     let isInitialLoad = true;
+    let intervalId: NodeJS.Timeout | null = null;
     
     async function fetchData() {
+      // Check ref - if stop flag was set, stop immediately
+      if (shouldStopPolling.current || waitingForContractConfirmation) {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+      
       try {
         if (isInitialLoad) {
           setLoading(true);
@@ -86,6 +117,62 @@ export default function TournamentPage() {
         ]);
         const gameIdNum = Number(gameId);
         
+        // Check if game just finished - store it and STOP all other polling
+        // BUT: If winner is already declared for this gameId, don't do anything - UI is locked
+        if (status?.gameState === "Finished" && status.gameId) {
+          // If winner already declared for this game, don't reset anything
+          if (winnerDeclared.declared && winnerDeclared.gameId === status.gameId) {
+            if (isInitialLoad) {
+              setLoading(false);
+            }
+            return; // UI is locked, don't change anything
+          }
+          
+          // Set stop flag immediately
+          shouldStopPolling.current = true;
+          
+          // Store the finished game state - NEVER clear this once winner is declared
+          setFinishedGameState({ gameStatus: status as GameStatus, gameId: status.gameId });
+          setWaitingForContractConfirmation(true);
+          setCurrentGameId(status.gameId);
+          
+          // Stop the interval immediately
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+          
+          // Immediately check past games and GameFinalized event
+          checkForWinnerConfirmation(status.gameId).catch(err => console.error("Error checking winner:", err));
+          
+          // STOP - don't update anything else
+          if (isInitialLoad) {
+            setLoading(false);
+          }
+          return;
+        }
+        
+        // If winner is declared, don't update gameStatus - keep showing finished state
+        if (winnerDeclared.declared && winnerDeclared.gameId && finishedGameState && finishedGameState.gameId === winnerDeclared.gameId) {
+          // UI is locked to finished state - don't update
+          if (isInitialLoad) {
+            setLoading(false);
+          }
+          return;
+        }
+        
+        // Check stop flag again after async operations
+        if (shouldStopPolling.current || waitingForContractConfirmation) {
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+          if (isInitialLoad) {
+            setLoading(false);
+          }
+          return;
+        }
+        
         // Update game start info
         setGameStartInfo((prevInfo) => {
           if (!prevInfo || JSON.stringify(prevInfo) !== JSON.stringify(startInfo)) {
@@ -94,7 +181,7 @@ export default function TournamentPage() {
           return prevInfo;
         });
         
-        // Only update state if data actually changed
+        // Update state if data actually changed
         setGameStatus((prevStatus) => {
           // Compare game status to detect changes
           if (!prevStatus || JSON.stringify(prevStatus) !== JSON.stringify(status)) {
@@ -146,12 +233,248 @@ export default function TournamentPage() {
 
     fetchData();
     // Poll every 5 seconds for updates
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [isGameStarted]);
+    intervalId = setInterval(() => {
+      // Check ref and state before each poll
+      if (shouldStopPolling.current || waitingForContractConfirmation) {
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+      fetchData();
+    }, 5000);
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+  }, [isGameStarted, waitingForContractConfirmation]);
 
-  const start = isGameStarted || gameStatus?.gameState === "InProgress";
-  const winnerDeclaredCheck = isWinnerDeclared || gameStatus?.gameState === "Finished"; // Check if winner is declared (game finished)
+  // Function to check for winner confirmation from contract
+  // Uses both GameFinalized event and past games to find the winner
+  const checkForWinnerConfirmation = async (gameId: number) => {
+    if (winnerDeclared.declared && winnerDeclared.gameId === gameId) return; // Already declared for this game
+    
+    try {
+      // Method 1: Check GameFinalized event
+      const finalizedEvent = await getGameFinalizedEvent(gameId);
+      if (finalizedEvent) {
+        const poolAmount = ethers.formatEther(finalizedEvent.potPaid);
+        const formattedAmount = parseFloat(poolAmount).toFixed(2);
+        
+        setWinnerData({
+          address: finalizedEvent.winner,
+          poolAmount: formattedAmount
+        });
+        
+        // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
+        setWinnerDeclared({ declared: true, gameId: gameId });
+        confettiTriggered.current = false;
+        setWaitingForContractConfirmation(false);
+        // DO NOT clear finishedGameState - keep it so UI always shows finished state
+        shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+        
+        console.log('Winner confirmed from GameFinalized event:', finalizedEvent);
+        return;
+      }
+      
+      // Method 2: Check past games - use gameId - 1 as index (gameId is 1-indexed, array is 0-indexed)
+      try {
+        const pastGameIndex = gameId - 1; // gameId 1 = index 0, gameId 2 = index 1, etc.
+        const pastGame = await getPastGame(pastGameIndex);
+        if (Number(pastGame.gameId) === gameId && pastGame.winner && pastGame.winner !== ethers.ZeroAddress) {
+          // Found the game in past games with a winner!
+          const poolAmount = ethers.formatEther(pastGame.potPaid);
+          const formattedAmount = parseFloat(poolAmount).toFixed(2);
+          
+          setWinnerData({
+            address: pastGame.winner,
+            poolAmount: formattedAmount
+          });
+          
+          // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
+          setWinnerDeclared({ declared: true, gameId: gameId });
+          confettiTriggered.current = false;
+          setWaitingForContractConfirmation(false);
+          // DO NOT clear finishedGameState - keep it so UI always shows finished state
+          shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+          
+          console.log('Winner confirmed from past games (index', pastGameIndex, '):', pastGame);
+          return;
+        }
+      } catch (error) {
+        console.error(`Error checking past game at index ${gameId - 1}:`, error);
+        // If direct index fails, try searching all past games as fallback
+        try {
+          const pastGamesCount = await getPastGamesCount();
+          for (let i = 0; i < pastGamesCount; i++) {
+            try {
+              const pastGame = await getPastGame(i);
+              if (Number(pastGame.gameId) === gameId && pastGame.winner && pastGame.winner !== ethers.ZeroAddress) {
+                const poolAmount = ethers.formatEther(pastGame.potPaid);
+                const formattedAmount = parseFloat(poolAmount).toFixed(2);
+                
+                setWinnerData({
+                  address: pastGame.winner,
+                  poolAmount: formattedAmount
+                });
+                
+                // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
+                setWinnerDeclared({ declared: true, gameId: gameId });
+                confettiTriggered.current = false;
+                setWaitingForContractConfirmation(false);
+                // DO NOT clear finishedGameState - keep it so UI always shows finished state
+                shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+                
+                console.log('Winner confirmed from past games (fallback search, index', i, '):', pastGame);
+                return;
+              }
+            } catch (err) {
+              // Continue searching
+            }
+          }
+        } catch (fallbackError) {
+          console.error("Error in fallback past games search:", fallbackError);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking for winner confirmation:", error);
+    }
+  };
+
+  // Use finishedGameState if waiting for confirmation OR if winner is already declared
+  // This prevents UI from resetting when new game starts before contract confirms winner
+  // ONCE WINNER IS DECLARED, NEVER RESET - always show finished game state
+  const displayGameStatus = (winnerDeclared.declared && winnerDeclared.gameId && finishedGameState && finishedGameState.gameId === winnerDeclared.gameId)
+    ? finishedGameState.gameStatus
+    : (waitingForContractConfirmation && finishedGameState)
+    ? finishedGameState.gameStatus
+    : gameStatus;
+
+  // Monitor bid changes and fetch bid log when bid changes
+  useEffect(() => {
+    // STOP polling if waiting for winner confirmation
+    if (waitingForContractConfirmation) {
+      setBidPlacedItems([]);
+      previousBidAmount.current = 0;
+      previousRound.current = 0;
+      return;
+    }
+    
+    if (!displayGameStatus?.gameId || !displayGameStatus?.currentRound || displayGameStatus.gameState !== "InProgress") {
+      // Reset when game is not in progress
+      if (displayGameStatus?.gameState !== "InProgress") {
+        setBidPlacedItems([]);
+        previousBidAmount.current = 0;
+        previousRound.current = 0;
+      }
+      return;
+    }
+
+    const currentBidAmount = displayGameStatus?.highestBid?.amount || 0;
+    const currentRound = displayGameStatus.currentRound;
+
+    // Check if round changed - reset bid placed items for new round
+    if (currentRound !== previousRound.current) {
+      setBidPlacedItems([]);
+      previousRound.current = currentRound;
+      previousBidAmount.current = currentBidAmount;
+      return;
+    }
+
+    // Check if bid amount changed
+    if (currentBidAmount !== previousBidAmount.current && currentBidAmount > 0 && displayGameStatus) {
+      // Bid changed! Fetch bid log to see who placed the bid
+      async function fetchNewBid() {
+        if (!displayGameStatus) return;
+        try {
+          const bidLog = await getBidLog(displayGameStatus.gameId, displayGameStatus.currentRound);
+          if (bidLog && bidLog.length > 0 && displayGameStatus?.currentCard) {
+            // Get the most recent bid (highest amount or latest timestamp)
+            const sortedBids = [...bidLog].sort((a: any, b: any) => {
+              const amountA = a.amount || a.bidAmount || a.price || 0;
+              const amountB = b.amount || b.bidAmount || b.price || 0;
+              if (amountB !== amountA) return amountB - amountA; // Higher amount first
+              const timeA = a.timestamp || a.time || 0;
+              const timeB = b.timestamp || b.time || 0;
+              return timeB - timeA; // Most recent first
+            });
+            
+            const latestBid = sortedBids[0];
+            if (latestBid) {
+              const card = displayGameStatus.currentCard;
+              const cardType = (card.type || card.raw?.type || "sentinel").toUpperCase();
+              const cardName = card.name || card.raw?.name || "Unknown";
+              const bidder = latestBid.bidder || latestBid.address || latestBid.player 
+                ? shortenAddress(latestBid.bidder || latestBid.address || latestBid.player) 
+                : "Unknown";
+              const price = latestBid.amount || latestBid.bidAmount || latestBid.price 
+                ? `${latestBid.amount || latestBid.bidAmount || latestBid.price} pts` 
+                : "0 pts";
+              
+              // Add to bid placed items
+              setBidPlacedItems((prev) => {
+                // Avoid duplicates - check if this bid already exists
+                const exists = prev.some((item) => 
+                  item.address === bidder && 
+                  item.price === price && 
+                  item.role === cardType
+                );
+                if (!exists) {
+                  return [{ type: "bid", address: bidder, role: cardType, name: cardName, price: price }, ...prev];
+                }
+                return prev;
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching bid log when bid changed:", error);
+        }
+      }
+      
+      if (displayGameStatus) {
+        fetchNewBid();
+        previousBidAmount.current = currentBidAmount;
+      }
+    }
+  }, [displayGameStatus?.highestBid?.amount, displayGameStatus?.gameId, displayGameStatus?.currentRound, displayGameStatus?.gameState, displayGameStatus?.currentCard]);
+
+  // Countdown timer for round end time
+  useEffect(() => {
+    if (!displayGameStatus?.roundEndsInSeconds || displayGameStatus.roundEndsInSeconds <= 0) {
+      setTimeRemaining(null);
+      return;
+    }
+
+    // Reset timer when roundEndsInSeconds changes from API
+    setTimeRemaining(displayGameStatus.roundEndsInSeconds);
+
+    // Update every second
+    const timer = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev === null || prev <= 0) {
+          return 0; // Keep at 0 instead of null to show 00:00
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [displayGameStatus?.roundEndsInSeconds, displayGameStatus?.currentRound]); // Reset when round changes
+
+  // Format time as MM:SS
+  const formatTime = (seconds: number | null): string => {
+    if (seconds === null || seconds < 0) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+    
+  const start = isGameStarted || displayGameStatus?.gameState === "InProgress";
+  const winnerDeclaredCheck = isWinnerDeclared || winnerDeclared.declared || displayGameStatus?.gameState === "Finished"; // Check if winner is declared (game finished)
   
   // Initialize dummy data if isGameStarted toggle is set
   // This should override any API data when toggle is true
@@ -254,23 +577,23 @@ export default function TournamentPage() {
   // Check if winner is declared (game finished) - similar to start check
   // Only trigger if isWinnerDeclared toggle is true
   useEffect(() => {
-    // Reset winner state when toggle is false
-    if (!isWinnerDeclared) {
-      setWinnerDeclared(false);
+    // Reset winner state when toggle is false (but only if it was set by toggle, not by actual game)
+    if (!isWinnerDeclared && winnerDeclared.declared && !finishedGameState) {
+      setWinnerDeclared({ declared: false, gameId: null });
       setWinnerData(null);
       confettiTriggered.current = false;
       return;
     }
     
     // Only show if toggle is explicitly true - don't show if false
-    if (isWinnerDeclared && !winnerDeclared && !confettiTriggered.current) {
+    if (isWinnerDeclared && !winnerDeclared.declared && !confettiTriggered.current) {
       // Set winner data (using dummy data for now)
       const dummyWinner = {
         address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
         poolAmount: "1250.00"
       };
       setWinnerData(dummyWinner);
-      setWinnerDeclared(true);
+      setWinnerDeclared({ declared: true, gameId: currentGameId || null });
       confettiTriggered.current = true;
       
       // Trigger confetti with violet colors
@@ -319,7 +642,7 @@ export default function TournamentPage() {
     // Commented out - only show when toggle is true for testing
     // Uncomment below if you want modal to show when game actually finishes (even when toggle is false)
     /*
-    if (!isWinnerDeclared && gameStatus?.gameState === "Finished" && !winnerDeclared && !confettiTriggered.current) {
+    if (!isWinnerDeclared && gameStatus?.gameState === "Finished" && !winnerDeclared.declared && !confettiTriggered.current) {
       // Set winner data from game status (or dummy if not available)
       const winner = {
         address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb", // TODO: Get from gameStatus
@@ -369,11 +692,11 @@ export default function TournamentPage() {
     }
     */
   }, [isWinnerDeclared, winnerDeclared]);
-  
-  // Poll for GameFinalized event when game state is "Finished"
+
+  // Poll for winner confirmation when waiting
   useEffect(() => {
     // Skip if using dummy data or winner already declared
-    if (isGameStarted || isWinnerDeclared || winnerDeclared) {
+    if (isGameStarted || isWinnerDeclared || winnerDeclared.declared || !waitingForContractConfirmation || !finishedGameState) {
       // Clear any existing polling interval
       if (winnerPollingInterval.current) {
         clearInterval(winnerPollingInterval.current);
@@ -382,54 +705,9 @@ export default function TournamentPage() {
       return;
     }
     
-    // Only poll if game state is "Finished"
-    if (gameStatus?.gameState !== "Finished" || !gameStatus?.gameId) {
-      // Clear any existing polling interval
-      if (winnerPollingInterval.current) {
-        clearInterval(winnerPollingInterval.current);
-        winnerPollingInterval.current = null;
-      }
-      return;
-    }
-    
-    // Start polling for GameFinalized event every 3 seconds
+    // Start polling for winner confirmation every 3 seconds
     const pollForWinner = async () => {
-      try {
-        const finalizedEvent = await getGameFinalizedEvent(gameStatus.gameId);
-        
-        if (finalizedEvent) {
-          // Event found! Stop polling and trigger winner modal
-          if (winnerPollingInterval.current) {
-            clearInterval(winnerPollingInterval.current);
-            winnerPollingInterval.current = null;
-          }
-          
-          // Format potPaid amount in FIF (show potPaid value for Won Pool Amount)
-          console.log('GameFinalized event data:', {
-            gameId: finalizedEvent.gameId.toString(),
-            winner: finalizedEvent.winner,
-            potPaid: finalizedEvent.potPaid.toString(),
-            potCarriedOver: finalizedEvent.potCarriedOver.toString()
-          });
-          
-          const poolAmount = ethers.formatEther(finalizedEvent.potPaid);
-          console.log('Formatted potPaid:', poolAmount);
-          
-          // Set winner data
-          const formattedAmount = parseFloat(poolAmount).toFixed(2);
-          console.log('Setting winner data with poolAmount:', formattedAmount);
-          
-          setWinnerData({
-            address: finalizedEvent.winner,
-            poolAmount: formattedAmount
-          });
-          
-          setWinnerDeclared(true);
-          confettiTriggered.current = false; // Reset to trigger confetti
-        }
-      } catch (error) {
-        console.error("Error polling for GameFinalized event:", error);
-      }
+      await checkForWinnerConfirmation(finishedGameState.gameId);
     };
     
     // Poll immediately, then every 3 seconds
@@ -443,7 +721,7 @@ export default function TournamentPage() {
         winnerPollingInterval.current = null;
       }
     };
-  }, [gameStatus?.gameState, gameStatus?.gameId, isGameStarted, isWinnerDeclared, winnerDeclared]);
+  }, [waitingForContractConfirmation, finishedGameState, isGameStarted, isWinnerDeclared]);
   
   // Function to manually test winner modal with dummy data (for testing)
   const testWinnerModal = () => {
@@ -452,7 +730,7 @@ export default function TournamentPage() {
       poolAmount: "1250.00"
     };
     setWinnerData(dummyWinner);
-    setWinnerDeclared(true);
+    setWinnerDeclared({ declared: true, gameId: currentGameId || null });
     confettiTriggered.current = true;
     
     // Trigger confetti
@@ -495,62 +773,73 @@ export default function TournamentPage() {
   };
 
   // Function to shorten wallet address
-  const shortenAddress = (address: string) => {
+  const shortenAddress = (address: string | null | undefined) => {
+    if (!address || typeof address !== 'string') return "N/A";
     if (address.length <= 10) return address;
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  // Get current bid from API
-  const currentBid = gameStatus?.highestBid?.amount || 0;
-  const currentBidder = gameStatus?.highestBid?.bidder 
-    ? shortenAddress(gameStatus.highestBid.bidder) 
+  // Get current bid from API - use displayGameStatus to show finished game if waiting
+  const currentBid = displayGameStatus?.highestBid?.amount || 0;
+  const currentBidder = displayGameStatus?.highestBid?.bidder 
+    ? shortenAddress(displayGameStatus.highestBid.bidder) 
     : "No bidder";
   
   // Get past bid from auctionedCards (last auctioned card)
-  const pastBid = gameStatus?.auctionedCards && gameStatus.auctionedCards.length > 0
-    ? (gameStatus.auctionedCards[gameStatus.auctionedCards.length - 1] as any)?.bidAmount || 0
+  const pastBid = displayGameStatus?.auctionedCards && displayGameStatus.auctionedCards.length > 0
+    ? (displayGameStatus.auctionedCards[displayGameStatus.auctionedCards.length - 1] as any)?.bidAmount || 0
     : 0;
-  const pastBidder = gameStatus?.auctionedCards && gameStatus.auctionedCards.length > 0
-    ? gameStatus.auctionedCards[gameStatus.auctionedCards.length - 1]?.winner
-      ? shortenAddress(gameStatus.auctionedCards[gameStatus.auctionedCards.length - 1].winner!)
+  const pastBidder = displayGameStatus?.auctionedCards && displayGameStatus.auctionedCards.length > 0
+    ? displayGameStatus.auctionedCards[displayGameStatus.auctionedCards.length - 1]?.winner
+      ? shortenAddress(displayGameStatus.auctionedCards[displayGameStatus.auctionedCards.length - 1].winner!)
       : "No winner"
     : "No bidder";
   
   // Get current set from currentCard type
-  const currentSet = gameStatus?.currentCard?.type || gameStatus?.currentCard?.raw?.type || "";
+  const currentSet = displayGameStatus?.currentCard?.type || displayGameStatus?.currentCard?.raw?.type || "";
   
   // Get remaining cards count from API
-  const remainingCards = gameStatus?.remainingCards?.length || 0;
+  const remainingCards = displayGameStatus?.remainingCards?.length || 0;
 
-  // Bidding data for ticker from auctionedCards
+  // Bidding data for ticker - combines bid placed items and previous round wins
   const biddingData = useMemo(() => {
-    if (!gameStatus?.auctionedCards || gameStatus.auctionedCards.length === 0) {
-      return [];
-    }
-    
-    return gameStatus.auctionedCards
-      .filter((auctioned: any) => auctioned.winner) // Only show cards with winners
-      .map((auctioned: any) => {
-        const card = auctioned.card || auctioned.card?.raw || {};
-        const cardType = (card.type || card.raw?.type || "SENTINEL").toUpperCase();
-        const winner = auctioned.winner ? shortenAddress(auctioned.winner) : "Unknown";
-        const price = auctioned.bidAmount ? `$${(auctioned.bidAmount / 100).toFixed(2)}` : "$0.00";
-        
-        return {
-          card: cardType,
-          player: winner,
-          action: "BOUGHT",
-          price: price,
-        };
-      })
-      .reverse(); // Show most recent first
-  }, [gameStatus?.auctionedCards]);
+    const tickerItems: any[] = [];
 
-  // Get members and pool from API start-info
-  // Use gameStartInfo.playersJoined.length for agents playing
-  const membersJoined = gameStartInfo?.playersJoined.length || (start 
-    ? (gameStatus?.players.length || 0)
-    : playersFromEvents.length);
+    // 1. Add bid placed items (from when bids changed)
+    if (bidPlacedItems && bidPlacedItems.length > 0) {
+      tickerItems.push(...bidPlacedItems);
+    }
+
+    // 2. Add previous round wins (from auctionedCards)
+    if (displayGameStatus?.auctionedCards && displayGameStatus.auctionedCards.length > 0) {
+      displayGameStatus.auctionedCards
+        .filter((auctioned: any) => auctioned.winner) // Only show cards with winners
+        .forEach((auctioned: any) => {
+          const card = auctioned.card || auctioned.card?.raw || {};
+          const cardType = (card.type || card.raw?.type || "sentinel").toUpperCase();
+          const cardName = card.name || card.raw?.name || "Unknown";
+          const winner = auctioned.winner ? shortenAddress(auctioned.winner) : "Unknown";
+          const price = auctioned.pricePaid ? `${auctioned.pricePaid} pts` : (auctioned.bidAmount ? `${auctioned.bidAmount} pts` : "0 pts");
+          
+          tickerItems.push({
+            type: "win",
+            address: winner,
+            role: cardType,
+            name: cardName,
+            price: price,
+          });
+        });
+    }
+
+    // Reverse to show most recent first
+    return tickerItems.reverse();
+  }, [bidPlacedItems, displayGameStatus?.auctionedCards]);
+
+  // Get members and pool from API only - no dummy data or contract events
+  // Use gameStartInfo.playersJoined when not started, gameStatus.players when in progress
+  const membersJoined = start 
+    ? (gameStatus?.players?.length || 0)
+    : (gameStartInfo?.playersJoined?.length || 0);
   
   // Calculate total pool: playersJoined.length * 10 FIF
   const totalPool = gameStartInfo?.playersJoined.length 
@@ -561,16 +850,21 @@ export default function TournamentPage() {
         return sum + spent;
       }, 0) || 0);
 
-  // Convert API players data or event players to agents data format - memoized with specific dependencies
+  // Convert API players data to agents data format - memoized with specific dependencies
+  // Always use API data - no dummy data or contract events
   const agentsData = useMemo(() => {
-    // If game is in progress, use API players
-    if (start && gameStatus?.players) {
-      return gameStatus.players.map((player) => ({
-        walletAddress: player.address,
+    // If game is in progress, use API players from gameStatus
+    if (start && gameStatus?.players && gameStatus.players.length > 0) {
+      return gameStatus.players
+        .filter((player) => player.address && typeof player.address === 'string') // Filter out invalid addresses
+        .map((player) => ({
+        walletAddress: String(player.address || ''), // Ensure it's always a string
         pointsLeft: player.chipBalance || 0,
         cards: (player.cards || []).map((card: any) => {
           // Handle both direct card format and raw format from API
           const cardData = card.raw || card;
+          // Extract priceBought from API - this is the price paid in the auction
+          const priceBought = card.priceBought || 0;
           return {
             ...cardData,
             name: cardData.name || card.name,
@@ -580,27 +874,31 @@ export default function TournamentPage() {
             strategist: cardData.strategist || card.strategist || 0,
             type: card.type || cardData.type || "sentinel",
             description: cardData.description || card.description || "",
-            pointsRequired: 0, // API doesn't provide this, can be calculated if needed
+            pointsRequired: priceBought, // Use priceBought from API to show price paid
           };
         }),
       }));
     }
     
-    // If game is not started, use players from events
-    if (!start && playersFromEvents.length > 0) {
-      return playersFromEvents.map((address) => ({
-        walletAddress: address,
+    // If game is not started, use players from API (gameStartInfo.playersJoined)
+    // This ensures we only use API data, not contract events
+    if (!start && gameStartInfo?.playersJoined && gameStartInfo.playersJoined.length > 0) {
+      return gameStartInfo.playersJoined
+        .filter((address) => address && typeof address === 'string') // Filter out invalid addresses
+        .map((address) => ({
+        walletAddress: String(address || ''), // Ensure it's always a string
         pointsLeft: 500, // Default starting chips
         cards: [],
       }));
     }
     
+    // Return empty array if no API data available
     return [];
-  }, [gameStatus?.players, gameStatus?.gameState, playersFromEvents, start]);
+  }, [displayGameStatus?.players, displayGameStatus?.gameState, gameStartInfo?.playersJoined, start]);
 
   // Calculate remaining cards from API - group by type - memoized with specific dependencies
   const remainingCardsData = useMemo(() => {
-    if (!gameStatus || gameStatus.gameState === "NotStarted") {
+    if (!displayGameStatus || displayGameStatus.gameState === "NotStarted") {
       // Return empty sets when game hasn't started
       return {
         sentinel: [],
@@ -614,8 +912,8 @@ export default function TournamentPage() {
     const wonCardIds = new Set<number>();
     
     // Add cards from players
-    if (gameStatus.players) {
-      gameStatus.players.forEach((player) => {
+    if (displayGameStatus.players) {
+      displayGameStatus.players.forEach((player) => {
         (player.cards || []).forEach((card: any) => {
           const cardId = card.id || card.raw?.characterId || card.characterId;
           if (cardId !== undefined) {
@@ -626,8 +924,8 @@ export default function TournamentPage() {
     }
     
     // Add cards from auctionedCards that have winners
-    if (gameStatus.auctionedCards) {
-      gameStatus.auctionedCards.forEach((auctioned: any) => {
+    if (displayGameStatus.auctionedCards) {
+      displayGameStatus.auctionedCards.forEach((auctioned: any) => {
         if (auctioned.winner && auctioned.card) {
           const cardId = auctioned.card.id || auctioned.card.raw?.characterId || auctioned.card.characterId;
           if (cardId !== undefined) {
@@ -650,8 +948,8 @@ export default function TournamentPage() {
       strategist: [],
     };
 
-    if (gameStatus.remainingCards) {
-      gameStatus.remainingCards.forEach((card: any) => {
+    if (displayGameStatus.remainingCards) {
+      displayGameStatus.remainingCards.forEach((card: any) => {
         const cardId = card.id || card.raw?.characterId || card.characterId;
         // Only include if not won
         if (cardId && !wonCardIds.has(cardId)) {
@@ -664,7 +962,7 @@ export default function TournamentPage() {
     }
 
     return grouped;
-  }, [gameStatus?.remainingCards, gameStatus?.players, gameStatus?.auctionedCards, gameStatus?.gameState]);
+  }, [displayGameStatus?.remainingCards, displayGameStatus?.players, displayGameStatus?.auctionedCards, displayGameStatus?.gameState]);
 
   const toggleSet = (setName: string) => {
     if (openSets.includes(setName)) {
@@ -696,8 +994,8 @@ export default function TournamentPage() {
 
   return (
     <>
-      {/* Winner Modal - Only show when isWinnerDeclared is true */}
-      {isWinnerDeclared && winnerDeclared && winnerData && (
+      {/* Winner Modal - Show when winner is declared (either via toggle or actual game finish) */}
+      {(isWinnerDeclared || winnerDeclared.declared) && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -757,7 +1055,7 @@ export default function TournamentPage() {
             
             <button
               onClick={() => {
-                setWinnerDeclared(false);
+                setWinnerDeclared({ declared: false, gameId: null });
                 setWinnerData(null);
                 confettiTriggered.current = false;
                 router.push('/');
@@ -776,8 +1074,8 @@ export default function TournamentPage() {
       )}
       
     <div className="h-screen w-full flex flex-col overflow-hidden" style={{ backgroundColor: '#131313' }}>
-      {/* Winner Modal - Only show when isWinnerDeclared is true */}
-      {isWinnerDeclared && winnerDeclared && winnerData && (
+      {/* Winner Modal - Show when winner is declared (either via toggle or actual game finish) */}
+      {(isWinnerDeclared || winnerDeclared.declared) && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -837,7 +1135,7 @@ export default function TournamentPage() {
             
             <button
               onClick={() => {
-                setWinnerDeclared(false);
+                setWinnerDeclared({ declared: false, gameId: null });
                 setWinnerData(null);
                 confettiTriggered.current = false;
                 router.push('/');
@@ -880,15 +1178,24 @@ export default function TournamentPage() {
               pauseOnHover={false}
               style={{ height: '100%', display: 'flex', alignItems: 'center' }}
             >
-              {biddingData.map((bid, index) => (
+              {biddingData.map((item, index) => (
                 <div key={index} className="flex items-center mx-8">
-                  <span className="text-white font-bold mr-4">{bid.card}</span>
-                  <span className="text-white mr-4">{bid.player}</span>
-                  <span className="mr-4 font-bold" style={{ color: bid.action === 'BOUGHT' ? '#4ade80' : bid.action === 'PLAY' ? '#f97316' : '#ef4444' }}>
-                    {bid.action}
+                  <span className="text-white mr-4">{item.address}</span>
+                  <span className="text-white mr-4">{item.role}</span>
+                  <span className="text-white mr-4">{item.name}</span>
+                  <span className="mr-4 font-bold" style={{ color: item.type === 'win' ? '#4ade80' : '#f97316' }}>
+                    {item.type === 'win' ? 'BID WON' : 'BID PLACED'}
                   </span>
-                  <span className="text-white font-bold">{bid.price}</span>
-                  <span className="text-white mx-4">•</span>
+                  <span className="text-white font-bold">{item.price}</span>
+                  <div className="flex items-center justify-center mx-4" style={{ width: '20px', height: '20px' }}>
+                    <Image
+                      src="/logo.png"
+                      alt="Logo"
+                      width={20}
+                      height={20}
+                      className="object-contain"
+                    />
+                  </div>
                 </div>
               ))}
             </Marquee>
@@ -918,7 +1225,7 @@ export default function TournamentPage() {
           <div className="flex-1 overflow-y-auto overflow-x-visible rounded-lg p-6 pb-0 custom-scrollbar" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
             {/* Agents Section */}
             <p className="text-white mb-4 font-bold">Agents</p>
-            {loading && !gameStatus && !playersFromEvents.length ? (
+            {loading && !gameStatus && !gameStartInfo ? (
               <div className="text-center py-8">
                 <p className="text-white/70">Loading game data...</p>
               </div>
@@ -990,7 +1297,7 @@ export default function TournamentPage() {
                                   strategist={card.strategist || card.raw?.strategist || 0}
                                   type={(card.type || card.raw?.type || "sentinel") as "defender" | "attacker" | "sentinel" | "strategist"}
                                   description={card.description || card.raw?.description || ""}
-                                  pointsRequired={card.pointsRequired || 0}
+                                  pointsRequired={card.pointsRequired}
                                   isSmall={true}
                                   tagPosition="bottom-center"
                                   tagColor="green"
@@ -1105,29 +1412,30 @@ export default function TournamentPage() {
                   Game is Yet to Start
                 </p>
               </div>
-            ) : gameStatus?.currentCard ? (
+            ) : displayGameStatus?.currentCard ? (
               <div className="flex flex-col items-center justify-center w-full">
                 <div className="w-80">
                   <CharacterCard
-                    name={gameStatus.currentCard.name || gameStatus.currentCard.raw?.name || "Unknown"}
-                    characterImage={gameStatus.currentCard.image || gameStatus.currentCard.raw?.image || ""}
-                    attack={gameStatus.currentCard.attack || gameStatus.currentCard.raw?.attack || 0}
-                    defense={gameStatus.currentCard.defense || gameStatus.currentCard.raw?.defense || 0}
-                    strategist={gameStatus.currentCard.strategist || gameStatus.currentCard.raw?.strategist || 0}
-                    type={(gameStatus.currentCard.type || gameStatus.currentCard.raw?.type || "sentinel") as "defender" | "attacker" | "sentinel" | "strategist"}
-                    description={gameStatus.currentCard.raw?.description || gameStatus.currentCard.description || ""}
+                    name={displayGameStatus.currentCard.name || displayGameStatus.currentCard.raw?.name || "Unknown"}
+                    characterImage={displayGameStatus.currentCard.image || displayGameStatus.currentCard.raw?.image || ""}
+                    attack={displayGameStatus.currentCard.attack || displayGameStatus.currentCard.raw?.attack || 0}
+                    defense={displayGameStatus.currentCard.defense || displayGameStatus.currentCard.raw?.defense || 0}
+                    strategist={displayGameStatus.currentCard.strategist || displayGameStatus.currentCard.raw?.strategist || 0}
+                    type={(displayGameStatus.currentCard.type || displayGameStatus.currentCard.raw?.type || "sentinel") as "defender" | "attacker" | "sentinel" | "strategist"}
+                    description={displayGameStatus.currentCard.raw?.description || displayGameStatus.currentCard.description || ""}
                   />
                 </div>
                 
                 {/* Bid Information */}
                 <div className="w-full max-w-2xl space-y-6 px-4 mt-6">
-                  {/* Current Bid - Center */}
-                  <div className="flex items-center justify-center">
-                    <div className="text-center space-y-2">
+                  {/* Current Bid - Row Layout */}
+                  <div className="flex items-center justify-between gap-8">
+                    {/* Current Bid - Left Side */}
+                    <div className="text-center flex-1">
                       <p className="text-lg font-bold text-white uppercase tracking-wider">
                         Current Bid
                       </p>
-                      <div className="flex items-center justify-center">
+                      <div className="flex items-center justify-center mt-2">
                         <div className="text-4xl font-bold text-white">
                           <SlotCounter
                             value={currentBid}
@@ -1142,6 +1450,31 @@ export default function TournamentPage() {
                         <span className="text-gray-400">Current Bidder:</span>{" "}
                         <span className="text-white font-semibold">{currentBidder}</span>
                       </p>
+                    </div>
+
+                    {/* Round and Time - Right Side */}
+                    <div className="text-center flex-1 space-y-3">
+                      {/* Current Round */}
+                      <div>
+                        <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                          Round
+                        </p>
+                        <p className="text-2xl font-bold text-white">
+                          {displayGameStatus?.currentRound || 0}
+                        </p>
+                      </div>
+                      
+                      {/* Time Remaining */}
+                      {timeRemaining !== null && (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                            Time Remaining
+                          </p>
+                          <p className="text-3xl font-bold" style={{ color: timeRemaining <= 10 ? '#EF4444' : primaryColor }}>
+                            {formatTime(timeRemaining)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

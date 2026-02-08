@@ -82,8 +82,8 @@ function CharacterCard({
         border: `6px solid ${borderColor}`,
       }}
     >
-      {/* Price Tag */}
-      {pointsRequired !== undefined && (
+      {/* Price Tag - Shows price paid for the card */}
+      {pointsRequired !== undefined && pointsRequired !== null && (
         <div 
           className={`absolute z-20 rounded-full ${tagPosition === 'bottom-center' ? 'left-1/2 transform -translate-x-1/2' : '-top-2 -right-2'}`}
           style={{

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getAllPastGames, getCurrentGameId, getCurrentGameState, getCurrentPlayerCount, getCurrentTotalPot, getPastGame } from "@/lib/contract";
+import { getCurrentGameId, getCurrentGameState, getCurrentPlayerCount, getCurrentTotalPot, getPastGame, getGameFinalizedEvent, getPastGamesCount } from "@/lib/contract";
 import { getGameStatus, getGameStartInfo } from "@/lib/api";
 import { ethers } from "ethers";
 
@@ -90,8 +90,58 @@ export default function Home() {
           console.log("Error fetching current game ID:", error);
         }
 
-        // Fetch past games from contract
-        const pastGames = await getAllPastGames();
+        // Fetch only the 3 most recent past games (we'll show current + 3 behind = 4 total)
+        // First get the count of past games
+        let pastGamesCount = 0;
+        try {
+          pastGamesCount = await getPastGamesCount();
+        } catch (error) {
+          console.log("Error fetching past games count:", error);
+        }
+        
+        // Calculate which past games to fetch (3 most recent before currentGameId)
+        const pastGames = [];
+        if (pastGamesCount > 0 && currentGameId > 0) {
+          // We want to show 3 games behind currentGameId
+          // If currentGameId is 5, we want games 4, 3, 2 (indices 3, 2, 1)
+          // Index = gameId - 1, so gameId 4 = index 3, gameId 3 = index 2, etc.
+          // We need to fetch indices: (currentGameId-2), (currentGameId-3), (currentGameId-4)
+          // But make sure indices are valid (>= 0 and < pastGamesCount)
+          const gamesToFetch = [];
+          for (let i = 1; i <= 3; i++) {
+            const targetGameId = currentGameId - i;
+            if (targetGameId > 0) {
+              const index = targetGameId - 1; // gameId is 1-indexed, array is 0-indexed
+              if (index >= 0 && index < pastGamesCount) {
+                gamesToFetch.push({ gameId: targetGameId, index });
+              }
+            }
+          }
+          
+          // Fetch the games
+          for (const { gameId, index } of gamesToFetch) {
+            try {
+              const pastGame = await getPastGame(index);
+              // Verify it's the correct gameId
+              if (Number(pastGame.gameId) === gameId) {
+                pastGames.push(pastGame);
+              }
+            } catch (error) {
+              console.log(`Error fetching past game at index ${index} (gameId ${gameId}):`, error);
+            }
+          }
+        } else if (pastGamesCount > 0 && currentGameId === 0) {
+          // No current game, just fetch the last 3 past games
+          const startIndex = Math.max(0, pastGamesCount - 3);
+          for (let i = startIndex; i < pastGamesCount; i++) {
+            try {
+              const pastGame = await getPastGame(i);
+              pastGames.push(pastGame);
+            } catch (error) {
+              console.log(`Error fetching past game at index ${i}:`, error);
+            }
+          }
+        }
         
         // Fetch current game status from API
         let currentGameStatus = null;
@@ -152,8 +202,27 @@ export default function Home() {
             // Game is completed (in past games)
             const pastGame = pastGames.find(game => Number(game.gameId) === currentGameId);
             if (pastGame) {
-              const potPaidValue = pastGame.potPaid ? BigInt(pastGame.potPaid.toString()) : BigInt(0);
-              const potCarriedOverValue = pastGame.potCarriedOver ? BigInt(pastGame.potCarriedOver.toString()) : BigInt(0);
+              // Fetch GameFinalized event to get the actual winner
+              let winner = pastGame.winner;
+              let potPaidFromEvent = pastGame.potPaid;
+              let potCarriedOverFromEvent = pastGame.potCarriedOver;
+              
+              try {
+                const finalizedEvent = await getGameFinalizedEvent(displayGameId);
+                if (finalizedEvent) {
+                  // Use winner from event if available
+                  winner = finalizedEvent.winner;
+                  potPaidFromEvent = finalizedEvent.potPaid;
+                  potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                  console.log('GameFinalized event found for game', displayGameId, ':', finalizedEvent);
+                }
+              } catch (error) {
+                console.log('Error fetching GameFinalized event for game', displayGameId, ':', error);
+                // Fall back to pastGame data
+              }
+              
+              const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+              const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
               const poolValue = potPaidValue;
               const hasNoWinner = potCarriedOverValue > 0;
               
@@ -170,7 +239,7 @@ export default function Home() {
                 playersJoined: totalPlayersNum,
                 totalPlayers: 5,
                 poolAmount: ethers.formatEther(poolValue),
-                winner: pastGame.winner,
+                winner: winner,
                 hasNoWinner: hasNoWinner,
               });
             }
@@ -232,8 +301,27 @@ export default function Home() {
             // Show games that are finished (gameId < currentGameId)
             // Contract gameId is 1-indexed, so we use it directly
             if (gameIdNum < currentGameId) {
-                const potPaidValue = game.potPaid ? BigInt(game.potPaid.toString()) : BigInt(0);
-                const potCarriedOverValue = game.potCarriedOver ? BigInt(game.potCarriedOver.toString()) : BigInt(0);
+                // Fetch GameFinalized event to get the actual winner
+                let winner = game.winner;
+                let potPaidFromEvent = game.potPaid;
+                let potCarriedOverFromEvent = game.potCarriedOver;
+                
+                try {
+                  const finalizedEvent = await getGameFinalizedEvent(gameIdNum);
+                  if (finalizedEvent) {
+                    // Use winner from event if available
+                    winner = finalizedEvent.winner;
+                    potPaidFromEvent = finalizedEvent.potPaid;
+                    potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                    console.log('GameFinalized event found for past game', gameIdNum, ':', finalizedEvent);
+                  }
+                } catch (error) {
+                  console.log('Error fetching GameFinalized event for past game', gameIdNum, ':', error);
+                  // Fall back to game data
+                }
+                
+                const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+                const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
                 // Always use potPaid for pool amount display
                 const poolValue = potPaidValue;
                 
@@ -254,12 +342,12 @@ export default function Home() {
                   totalPlayers: game.totalPlayers,
                   totalPlayersRaw: game.totalPlayers,
                   totalPlayersNum,
-                  potPaid: game.potPaid,
-                  potCarriedOver: game.potCarriedOver,
+                  potPaid: potPaidFromEvent,
+                  potCarriedOver: potCarriedOverFromEvent,
                   potPaidValue: potPaidValue.toString(),
                   potCarriedOverValue: potCarriedOverValue.toString(),
                   hasNoWinner,
-                  winner: game.winner,
+                  winner: winner,
                   poolAmount: ethers.formatEther(poolValue),
                   allGameKeys: Object.keys(game),
                   gameArray: Array.isArray(game) ? game : null
@@ -271,7 +359,7 @@ export default function Home() {
                   playersJoined: totalPlayersNum,
                   totalPlayers: 5,
                   poolAmount: ethers.formatEther(poolValue),
-                  winner: game.winner,
+                  winner: winner,
                   hasNoWinner: hasNoWinner,
                   potCarriedOver: ethers.formatEther(potCarriedOverValue), // Include for debugging
                 });
@@ -281,12 +369,33 @@ export default function Home() {
           pastGamesToShow.sort((a, b) => b.gameId - a.gameId);
         } else {
           // If no current game, show all past games
-          const recentPastGames = pastGames
+          const recentPastGamesPromises = pastGames
             .slice(-3)
             .reverse()
-            .map((game) => {
-              const potPaidValue = game.potPaid ? BigInt(game.potPaid.toString()) : BigInt(0);
-              const potCarriedOverValue = game.potCarriedOver ? BigInt(game.potCarriedOver.toString()) : BigInt(0);
+            .map(async (game) => {
+              const gameIdNum = Number(game.gameId);
+              
+              // Fetch GameFinalized event to get the actual winner
+              let winner = game.winner;
+              let potPaidFromEvent = game.potPaid;
+              let potCarriedOverFromEvent = game.potCarriedOver;
+              
+              try {
+                const finalizedEvent = await getGameFinalizedEvent(gameIdNum);
+                if (finalizedEvent) {
+                  // Use winner from event if available
+                  winner = finalizedEvent.winner;
+                  potPaidFromEvent = finalizedEvent.potPaid;
+                  potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                  console.log('GameFinalized event found for past game (else branch)', gameIdNum, ':', finalizedEvent);
+                }
+              } catch (error) {
+                console.log('Error fetching GameFinalized event for past game (else branch)', gameIdNum, ':', error);
+                // Fall back to game data
+              }
+              
+              const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+              const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
               // Always use potPaid for pool amount display
               const poolValue = potPaidValue;
               const hasNoWinner = potCarriedOverValue > 0; // No winner if pot was carried over
@@ -301,28 +410,29 @@ export default function Home() {
               
               // Log past game data for debugging
               console.log('Past Game Data (else branch):', {
-                gameId: Number(game.gameId),
+                gameId: gameIdNum,
                 totalPlayers: game.totalPlayers,
                 totalPlayersNum,
-                potPaid: game.potPaid,
-                potCarriedOver: game.potCarriedOver,
+                potPaid: potPaidFromEvent,
+                potCarriedOver: potCarriedOverFromEvent,
                 potPaidValue: potPaidValue.toString(),
                 potCarriedOverValue: potCarriedOverValue.toString(),
                 hasNoWinner,
-                winner: game.winner,
+                winner: winner,
                 poolAmount: ethers.formatEther(poolValue)
               });
               
               return {
-                gameId: Number(game.gameId), // Contract gameId is already 1-indexed
+                gameId: gameIdNum, // Contract gameId is already 1-indexed
                 status: "completed" as const,
                 playersJoined: totalPlayersNum,
                 totalPlayers: 5,
                 poolAmount: ethers.formatEther(poolValue),
-                winner: game.winner,
+                winner: winner,
                 hasNoWinner: hasNoWinner,
               };
             });
+          const recentPastGames = await Promise.all(recentPastGamesPromises);
           pastGamesToShow.push(...recentPastGames);
         }
 
@@ -333,8 +443,29 @@ export default function Home() {
           const remainingIndex = pastGames.length - tournamentCards.length - 1;
           if (remainingIndex >= 0) {
             const game = pastGames[remainingIndex];
-            const potPaidValue = game.potPaid ? BigInt(game.potPaid.toString()) : BigInt(0);
-            const potCarriedOverValue = game.potCarriedOver ? BigInt(game.potCarriedOver.toString()) : BigInt(0);
+            const gameIdNum = Number(game.gameId);
+            
+            // Fetch GameFinalized event to get the actual winner
+            let winner = game.winner;
+            let potPaidFromEvent = game.potPaid;
+            let potCarriedOverFromEvent = game.potCarriedOver;
+            
+            try {
+              const finalizedEvent = await getGameFinalizedEvent(gameIdNum);
+              if (finalizedEvent) {
+                // Use winner from event if available
+                winner = finalizedEvent.winner;
+                potPaidFromEvent = finalizedEvent.potPaid;
+                potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                console.log('GameFinalized event found for past game (while loop)', gameIdNum, ':', finalizedEvent);
+              }
+            } catch (error) {
+              console.log('Error fetching GameFinalized event for past game (while loop)', gameIdNum, ':', error);
+              // Fall back to game data
+            }
+            
+            const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+            const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
             // Always use potPaid for pool amount display
             const poolValue = potPaidValue;
             const hasNoWinner = potCarriedOverValue > 0; // No winner if pot was carried over
@@ -349,25 +480,25 @@ export default function Home() {
             
             // Log past game data for debugging
             console.log('Past Game Data (while loop):', {
-              gameId: Number(game.gameId),
+              gameId: gameIdNum,
               totalPlayers: game.totalPlayers,
               totalPlayersNum,
-              potPaid: game.potPaid,
-              potCarriedOver: game.potCarriedOver,
+              potPaid: potPaidFromEvent,
+              potCarriedOver: potCarriedOverFromEvent,
               potPaidValue: potPaidValue.toString(),
               potCarriedOverValue: potCarriedOverValue.toString(),
               hasNoWinner,
-              winner: game.winner,
+              winner: winner,
               poolAmount: ethers.formatEther(poolValue)
             });
             
             tournamentCards.push({
-              gameId: Number(game.gameId), // Contract gameId is already 1-indexed
+              gameId: gameIdNum, // Contract gameId is already 1-indexed
               status: "completed" as const,
               playersJoined: totalPlayersNum,
               totalPlayers: 5,
               poolAmount: ethers.formatEther(poolValue),
-              winner: game.winner,
+              winner: winner,
               hasNoWinner: hasNoWinner,
               potCarriedOver: ethers.formatEther(potCarriedOverValue), // Include for debugging
             });

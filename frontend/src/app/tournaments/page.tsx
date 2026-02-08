@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getAllPastGames, getCurrentGameId, getCurrentGameState, getCurrentPlayerCount, getCurrentTotalPot } from "@/lib/contract";
+import { getAllPastGames, getCurrentGameId, getCurrentGameState, getCurrentPlayerCount, getCurrentTotalPot, getGameFinalizedEvent } from "@/lib/contract";
 import { getGameStatus, getGameStartInfo } from "@/lib/api";
 import { ethers } from "ethers";
 
@@ -97,8 +97,27 @@ export default function TournamentsPage() {
             // Game is completed (in past games)
             const pastGame = pastGames.find(game => Number(game.gameId) === currentGameId);
             if (pastGame) {
-              const potPaidValue = pastGame.potPaid ? BigInt(pastGame.potPaid.toString()) : BigInt(0);
-              const potCarriedOverValue = pastGame.potCarriedOver ? BigInt(pastGame.potCarriedOver.toString()) : BigInt(0);
+              // Fetch GameFinalized event to get the actual winner
+              let winner = pastGame.winner;
+              let potPaidFromEvent = pastGame.potPaid;
+              let potCarriedOverFromEvent = pastGame.potCarriedOver;
+              
+              try {
+                const finalizedEvent = await getGameFinalizedEvent(displayGameId);
+                if (finalizedEvent) {
+                  // Use winner from event if available
+                  winner = finalizedEvent.winner;
+                  potPaidFromEvent = finalizedEvent.potPaid;
+                  potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                  console.log('GameFinalized event found for game', displayGameId, ':', finalizedEvent);
+                }
+              } catch (error) {
+                console.log('Error fetching GameFinalized event for game', displayGameId, ':', error);
+                // Fall back to pastGame data
+              }
+              
+              const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+              const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
               const poolValue = potPaidValue;
               const hasNoWinner = potCarriedOverValue > 0;
               
@@ -115,7 +134,7 @@ export default function TournamentsPage() {
                 playersJoined: totalPlayersNum,
                 totalPlayers: 5,
                 poolAmount: ethers.formatEther(poolValue),
-                winner: pastGame.winner,
+                winner: winner,
                 hasNoWinner: hasNoWinner,
               });
             }
@@ -177,8 +196,24 @@ export default function TournamentsPage() {
             // Show games that are finished (gameId < currentGameId)
             // Contract gameId is 1-indexed, so we use it directly
             if (gameIdNum < currentGameId) {
-              const potPaidValue = game.potPaid ? BigInt(game.potPaid.toString()) : BigInt(0);
-              const potCarriedOverValue = game.potCarriedOver ? BigInt(game.potCarriedOver.toString()) : BigInt(0);
+              // Fetch GameFinalized event to get the actual winner
+              let winner = game.winner;
+              let potPaidFromEvent = game.potPaid;
+              
+              try {
+                const finalizedEvent = await getGameFinalizedEvent(gameIdNum);
+                if (finalizedEvent) {
+                  // Use winner from event if available
+                  winner = finalizedEvent.winner;
+                  potPaidFromEvent = finalizedEvent.potPaid;
+                  console.log('GameFinalized event found for past game', gameIdNum, ':', finalizedEvent);
+                }
+              } catch (error) {
+                console.log('Error fetching GameFinalized event for past game', gameIdNum, ':', error);
+                // Fall back to game data
+              }
+              
+              const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
               // Always use potPaid for pool amount display
               const poolValue = potPaidValue;
               
@@ -188,7 +223,7 @@ export default function TournamentsPage() {
                 playersJoined: Number(game.totalPlayers.toString()),
                 totalPlayers: 5,
                 poolAmount: ethers.formatEther(poolValue),
-                winner: game.winner,
+                winner: winner,
               });
             }
           }
@@ -196,10 +231,31 @@ export default function TournamentsPage() {
           pastGamesToShow.sort((a, b) => b.gameId - a.gameId);
         } else {
           // If no current game, show all past games
-          const completedGames = pastGames
-            .map((game) => {
-              const potPaidValue = game.potPaid ? BigInt(game.potPaid.toString()) : BigInt(0);
-              const potCarriedOverValue = game.potCarriedOver ? BigInt(game.potCarriedOver.toString()) : BigInt(0);
+          const completedGamesPromises = pastGames
+            .map(async (game) => {
+              const gameIdNum = Number(game.gameId);
+              
+              // Fetch GameFinalized event to get the actual winner
+              let winner = game.winner;
+              let potPaidFromEvent = game.potPaid;
+              let potCarriedOverFromEvent = game.potCarriedOver;
+              
+              try {
+                const finalizedEvent = await getGameFinalizedEvent(gameIdNum);
+                if (finalizedEvent) {
+                  // Use winner from event if available
+                  winner = finalizedEvent.winner;
+                  potPaidFromEvent = finalizedEvent.potPaid;
+                  potCarriedOverFromEvent = finalizedEvent.potCarriedOver;
+                  console.log('GameFinalized event found for past game (else branch)', gameIdNum, ':', finalizedEvent);
+                }
+              } catch (error) {
+                console.log('Error fetching GameFinalized event for past game (else branch)', gameIdNum, ':', error);
+                // Fall back to game data
+              }
+              
+              const potPaidValue = potPaidFromEvent ? BigInt(potPaidFromEvent.toString()) : BigInt(0);
+              const potCarriedOverValue = potCarriedOverFromEvent ? BigInt(potCarriedOverFromEvent.toString()) : BigInt(0);
               // Always use potPaid for pool amount display
               const poolValue = potPaidValue;
               const hasNoWinner = potCarriedOverValue > 0; // No winner if pot was carried over
@@ -213,16 +269,17 @@ export default function TournamentsPage() {
                 : Number(totalPlayersValue.toString());
               
               return {
-                gameId: Number(game.gameId), // Contract gameId is already 1-indexed
+                gameId: gameIdNum, // Contract gameId is already 1-indexed
                 status: "completed" as const,
                 playersJoined: totalPlayersNum,
                 totalPlayers: 5,
                 poolAmount: ethers.formatEther(poolValue),
-                winner: game.winner,
+                winner: winner,
                 hasNoWinner: hasNoWinner,
               };
-            })
-            .sort((a, b) => b.gameId - a.gameId);
+            });
+          const completedGames = await Promise.all(completedGamesPromises);
+          completedGames.sort((a, b) => b.gameId - a.gameId);
           pastGamesToShow.push(...completedGames);
         }
 
