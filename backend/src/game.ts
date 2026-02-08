@@ -482,7 +482,32 @@ export async function endRound(): Promise<void> {
     if (ioInstance) {
       ioInstance.emit("gameFinished", { gameId: state.gameId });
     }
-    await endGame();
+    
+    // Fetch contract game state to ensure it's actually finished before calling finalizeGame
+    try {
+      const gameStateOnChain = await contractInstance.currentGameState();
+      if (gameStateOnChain === 2) {
+        // Game is finished on contract (2 = Finished)
+        await endGame();
+      } else {
+        logger.warn(
+          { contractGameState: gameStateOnChain, localRound: state.currentRound, totalCards: state.totalCards },
+          "Game should be finished locally but contract state doesn't reflect it yet"
+        );
+        // Retry after a short delay
+        setTimeout(() => {
+          endGame().catch((err) => {
+            logger.error({ err }, "endGame retry failed");
+          });
+        }, 1000);
+      }
+    } catch (e: any) {
+      logger.error({ err: e }, "Failed to fetch game state before endGame");
+      // Try to end game anyway
+      await endGame().catch((err) => {
+        logger.error({ err }, "endGame failed");
+      });
+    }
   } else {
     if (ioInstance) {
       ioInstance.emit("roundStarted", {
