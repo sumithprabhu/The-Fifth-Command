@@ -555,13 +555,15 @@ async function endGame(): Promise<void> {
     scores.push({ bidder, power });
   }
 
-  if (scores.length === 0) {
-    logger.info({ gameId: state.gameId }, "No valid decks to finalize game");
-    return;
-  }
+  const zeroAddress = "0x0000000000000000000000000000000000000000";
+  let winner = zeroAddress; // Default to zero address if no valid decks
 
-  scores.sort((a, b) => b.power - a.power);
-  const winner = scores[0].bidder;
+  if (scores.length > 0) {
+    scores.sort((a, b) => b.power - a.power);
+    winner = scores[0].bidder;
+  } else {
+    logger.info({ gameId: state.gameId }, "No valid decks found, finalizing with zero address");
+  }
 
   try {
     const tx = await contractInstance.finalizeGame(winner);
