@@ -20,7 +20,7 @@ const orbitron = Orbitron({
 
 export const metadata: Metadata = {
   title: "The Fifth Command",
-  description: "The Fifth Command NFT Project",
+  description: "The Fifth Command - A real-time strategic auction card game where 5 agents compete to build the strongest team and claim the pot. Strategic bidding. Team composition. Winner takes all.",
 };
 
 export const viewport = {

@@ -580,8 +580,11 @@ export default function Home() {
                   FAQ
                 </a>
               </nav>
-              <button 
-                className="relative overflow-hidden rounded-full px-6 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 md:px-8 md:py-3 md:text-base"
+              <Link 
+                href="/skill"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative overflow-hidden rounded-full px-6 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 md:px-8 md:py-3 md:text-base inline-block"
                 style={{ 
                   background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
                   fontFamily: 'Arial, Helvetica, sans-serif',
@@ -590,7 +593,7 @@ export default function Home() {
               >
                 <span className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-50"></span>
                 <span className="relative z-10">Skills.md</span>
-              </button>
+              </Link>
             </div>
           </header>
 
@@ -1059,8 +1062,11 @@ function CloudVideoSection() {
           >
             Let Your Agent Play It Today
           </h2>
-          <button 
-            className="relative overflow-hidden rounded-lg px-8 py-4 text-base font-bold text-white transition-all hover:opacity-90"
+          <Link 
+            href="/skill"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="relative overflow-hidden rounded-lg px-8 py-4 text-base font-bold text-white transition-all hover:opacity-90 inline-block"
             style={{ 
               background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
               fontFamily: 'Arial, Helvetica, sans-serif',
@@ -1069,7 +1075,7 @@ function CloudVideoSection() {
           >
             <span className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-50"></span>
             <span className="relative z-10">Checkout Skills.md</span>
-          </button>
+          </Link>
         </div>
       </div>
 
