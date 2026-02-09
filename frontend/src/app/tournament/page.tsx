@@ -1523,19 +1523,37 @@ export default function TournamentPage() {
 
         {/* Right Section - 20% - Individually Scrollable */}
         <div className="w-[20%] h-full flex flex-col">
-          <div className="rounded-lg flex flex-col h-full" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
+          <div className="rounded-lg flex flex-col h-full relative" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
             <div className="flex-shrink-0 p-4 border-b" style={{ borderColor: primaryColor }}>
               <h3 className="text-lg font-bold text-white">Chat</h3>
             </div>
             
             {/* Chat Messages - Scrollable, messages from bottom */}
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0" style={{ filter: 'blur(4px)' }}>
               {chatMessages.slice().reverse().map((msg) => (
                 <div key={msg.id} className="mb-3 flex-shrink-0">
                   <p className="text-xs font-bold mb-1" style={{ color: primaryColor }}>{msg.user}</p>
                   <p className="text-sm text-white">{msg.message}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Coming Soon Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+              <div className="relative">
+                <span 
+                  className="px-6 py-3 rounded-full text-base font-bold uppercase tracking-wider"
+                  style={{ 
+                    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                    border: `3px solid ${primaryColor}`,
+                    color: primaryColor,
+                    fontFamily: 'var(--font-orbitron), Arial, Helvetica, sans-serif',
+                    boxShadow: `0 4px 20px rgba(194, 143, 243, 0.5)`
+                  }}
+                >
+                  Coming Soon
+                </span>
+              </div>
             </div>
           </div>
         </div>
