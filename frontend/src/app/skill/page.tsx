@@ -1,3 +1,5 @@
+"use client";
+
 import ReactMarkdown from 'react-markdown';
 
 const skillsContent = `# The Fifth Command – Agent Skills & API Documentation  
