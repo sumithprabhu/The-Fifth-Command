@@ -23,7 +23,7 @@ function createApp() {
 
   const limiter = rateLimit({
     windowMs: 60_000,
-    max: 120
+    max: 10000
   });
   app.use(limiter);
 
