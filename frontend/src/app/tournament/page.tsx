@@ -10,7 +10,7 @@ import SlotCounter from "react-slot-counter";
 import confetti from "canvas-confetti";
 import { ethers } from "ethers";
 import { getGameStatus, getGameStartInfo, GameStartInfo, getBidLog } from "@/lib/api";
-import { getCurrentGameId, getPlayersFromEvents, getGameFinalizedEvent, getPastGamesCount, getPastGame, getAllPastGames } from "@/lib/contract";
+import { getCurrentGameId, getGameFinalizedEvent, getPastGamesCount, getPastGame, getAllPastGames } from "@/lib/contract";
 import { useRouter } from "next/navigation";
 
 interface GameStatus {
@@ -47,7 +47,6 @@ export default function TournamentPage() {
   const router = useRouter();
   const [gameStatus, setGameStatus] = useState<GameStatus | null>(null);
   const [currentGameId, setCurrentGameId] = useState<number>(0);
-  const [playersFromEvents, setPlayersFromEvents] = useState<string[]>([]);
   const [gameStartInfo, setGameStartInfo] = useState<GameStartInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [openSets, setOpenSets] = useState<string[]>([]);
@@ -110,12 +109,21 @@ export default function TournamentPage() {
         }
         
         // Fetch API status, contract gameId, and game start info in parallel
-        const [status, gameId, startInfo] = await Promise.all([
+        // Handle RPC errors gracefully - use API gameId as fallback
+        let gameId: bigint | null = null;
+        try {
+          gameId = await getCurrentGameId();
+        } catch (error) {
+          console.warn("Failed to fetch gameId from contract, will use API gameId:", error);
+        }
+        
+        const [status, startInfo] = await Promise.all([
           getGameStatus(),
-          getCurrentGameId(),
           getGameStartInfo()
         ]);
-        const gameIdNum = Number(gameId);
+        
+        // Use API gameId if contract call failed
+        const gameIdNum = gameId ? Number(gameId) : (status?.gameId || 0);
         
         // Check if game just finished - store it and STOP all other polling
         // BUT: If winner is already declared for this gameId, don't do anything - UI is locked
@@ -187,44 +195,17 @@ export default function TournamentPage() {
           return prevId;
         });
         
-        // Update game start info - only if gameId matches (startInfo is always for current game)
+        // Always update game start info - it's always for the current game
+        // We'll prioritize it in agentsData logic, but keep it updated
         setGameStartInfo((prevInfo) => {
+          // Only update if data actually changed
           if (!prevInfo || JSON.stringify(prevInfo) !== JSON.stringify(startInfo)) {
             return startInfo;
           }
           return prevInfo;
         });
         
-        // Always fetch players from events FIRST for current game to cross-reference with API data
-        // This ensures we only show players who actually joined the current game
-        // CRITICAL: Fetch events BEFORE updating gameStatus to prevent showing stale players
-        if (gameIdNum > 0 && (status?.gameState === "NotStarted" || status?.gameState === "InProgress")) {
-          try {
-            console.log(`[AGENTS DEBUG] Fetching players from events for gameId ${gameIdNum}...`);
-            const players = await getPlayersFromEvents(gameIdNum);
-            console.log(`[AGENTS DEBUG] Fetched ${players.length} players from events:`, players);
-            setPlayersFromEvents((prevPlayers) => {
-              // Only update if players list changed
-              if (JSON.stringify(prevPlayers) !== JSON.stringify(players)) {
-                console.log(`[AGENTS DEBUG] Updated playersFromEvents: ${prevPlayers.length} -> ${players.length}`);
-                return players;
-              }
-              return prevPlayers;
-            });
-          } catch (error) {
-            console.error(`[AGENTS DEBUG] Error fetching players from events for gameId ${gameIdNum}:`, error);
-            // Don't clear existing players on error, keep what we have
-          }
-        } else {
-          // Clear players from events if game is finished or no gameId
-          setPlayersFromEvents((prevPlayers) => {
-            if (prevPlayers.length > 0) {
-              console.log(`[AGENTS DEBUG] Clearing playersFromEvents (game finished or no gameId)`);
-              return [];
-            }
-            return prevPlayers;
-          });
-        }
+        // Agents are now fetched from API (gameStartInfo.playersJoined) - no RPC calls needed
         
         // Update state if data actually changed AND gameId matches
         // CRITICAL: Only use gameStatus if gameId matches currentGameId to prevent showing players from previous games
@@ -235,11 +216,7 @@ export default function TournamentPage() {
             return prevStatus; // Keep previous status if gameId doesn't match
           }
           
-          // Log API players data
-          if (status?.players) {
-            console.log(`[AGENTS DEBUG] API returned ${status.players.length} players for gameId ${status.gameId}:`, 
-              status.players.map(p => ({ address: p.address, chipBalance: p.chipBalance })));
-          }
+          // Game status updated - agents come from gameStartInfo API
           
           // Compare game status to detect changes
           if (!prevStatus || JSON.stringify(prevStatus) !== JSON.stringify(status)) {
@@ -254,7 +231,6 @@ export default function TournamentPage() {
         if (isInitialLoad) {
           setGameStatus(null);
           setCurrentGameId(0);
-          setPlayersFromEvents([]);
         }
       } finally {
         if (isInitialLoad) {
@@ -725,7 +701,7 @@ export default function TournamentPage() {
     }
     */
   }, [isWinnerDeclared, winnerDeclared]);
-
+  
   // Poll for winner confirmation when waiting
   useEffect(() => {
     // Skip if using dummy data or winner already declared
@@ -875,12 +851,12 @@ export default function TournamentPage() {
     // 2. Add previous round wins (from auctionedCards)
     if (displayGameStatus?.auctionedCards && displayGameStatus.auctionedCards.length > 0) {
       displayGameStatus.auctionedCards
-        .filter((auctioned: any) => auctioned.winner) // Only show cards with winners
+      .filter((auctioned: any) => auctioned.winner) // Only show cards with winners
         .forEach((auctioned: any) => {
-          const card = auctioned.card || auctioned.card?.raw || {};
+        const card = auctioned.card || auctioned.card?.raw || {};
           const cardType = (card.type || card.raw?.type || "sentinel").toUpperCase();
           const cardName = card.name || card.raw?.name || "Unknown";
-          const winner = auctioned.winner ? shortenAddress(auctioned.winner) : "Unknown";
+        const winner = auctioned.winner ? shortenAddress(auctioned.winner) : "Unknown";
           const price = auctioned.pricePaid ? `${auctioned.pricePaid} chips` : (auctioned.bidAmount ? `${auctioned.bidAmount} chips` : "0 chips");
           
           tickerItems.push({
@@ -888,7 +864,7 @@ export default function TournamentPage() {
             address: winner,
             role: cardType,
             name: cardName,
-            price: price,
+          price: price,
           });
         });
     }
@@ -897,161 +873,76 @@ export default function TournamentPage() {
     return tickerItems.reverse();
   }, [bidPlacedItems, displayGameStatus?.auctionedCards]);
 
-  // Convert API players data to agents data format - memoized with specific dependencies
-  // IMPORTANT: Cross-reference with contract events to ensure we only show players from current game
+  // Convert API players data to agents data format
+  // CRITICAL: ONLY use gameStartInfo.playersJoined (from start-info API) for agent list
+  // Map cards from auctionedCards (from status API) to those agents
+  // NEVER use gameStatus.players - only use start-info API
   const agentsData = useMemo(() => {
-    console.log(`[AGENTS DEBUG] agentsData useMemo triggered:`, {
-      start,
-      gameStatusPlayers: gameStatus?.players?.length || 0,
-      gameStatusGameId: gameStatus?.gameId,
-      currentGameId,
-      playersFromEventsCount: playersFromEvents.length,
-      gameStartInfoPlayers: gameStartInfo?.playersJoined?.length || 0
+    // ONLY use gameStartInfo.playersJoined from start-info API
+    if (!gameStartInfo?.playersJoined || gameStartInfo.playersJoined.length === 0) {
+      return [];
+    }
+    
+    // Filter out invalid addresses
+    const validPlayers = gameStartInfo.playersJoined.filter((player) => {
+      if (!player.address || typeof player.address !== 'string') return false;
+      if (player.address === '0x0000000000000000000000000000000000000000') return false;
+      return true;
     });
     
-    // If game is in progress, use API players from gameStatus
-    // CRITICAL: Only use if gameId matches currentGameId AND cross-reference with contract events
-    if (start && gameStatus?.players && gameStatus.players.length > 0) {
-      // Verify gameId matches before using players
-      if (gameStatus.gameId && currentGameId > 0 && gameStatus.gameId !== currentGameId) {
-        console.warn(`[AGENTS DEBUG] GameId mismatch: API gameId ${gameStatus.gameId} != currentGameId ${currentGameId}, returning empty agents`);
-        return [];
-      }
-      
-      // CRITICAL: Don't show agents until we have contract events to cross-reference
-      // This prevents showing stale players from previous games
-      if (playersFromEvents.length === 0) {
-        console.log(`[AGENTS DEBUG] No contract events available yet for gameId ${currentGameId}, waiting... (API has ${gameStatus.players.length} players)`);
-        return []; // Return empty until we have events
-      }
-      
-      // Cross-reference with contract events to get actual players for current game
-      // Only show players that are in both API response AND contract events
-      const apiPlayerAddresses = new Set(
-        gameStatus.players
-          .filter((p) => p.address && typeof p.address === 'string' && p.address !== '0x0000000000000000000000000000000000000000')
-          .map((p) => p.address.toLowerCase())
-      );
-      
-      const eventPlayerAddresses = new Set(playersFromEvents.map(addr => addr.toLowerCase()));
-      const validPlayerAddresses = new Set(
-        Array.from(apiPlayerAddresses).filter(addr => eventPlayerAddresses.has(addr))
-      );
-      
-      console.log(`[AGENTS DEBUG] Cross-referencing players:`, {
-        apiPlayers: Array.from(apiPlayerAddresses),
-        eventPlayers: Array.from(eventPlayerAddresses),
-        validPlayers: Array.from(validPlayerAddresses),
-        apiCount: apiPlayerAddresses.size,
-        eventCount: eventPlayerAddresses.size,
-        validCount: validPlayerAddresses.size
-      });
-      
-      // Filter players to only those verified by contract events
-      const validPlayers = gameStatus.players.filter((player) => {
-        if (!player.address || typeof player.address !== 'string') {
-          console.log(`[AGENTS DEBUG] Filtering out player - invalid address:`, player.address);
-          return false;
-        }
-        if (player.address === '0x0000000000000000000000000000000000000000') {
-          console.log(`[AGENTS DEBUG] Filtering out player - zero address`);
-          return false;
-        }
-        // Must be in valid player addresses set (in contract events)
-        if (!validPlayerAddresses.has(player.address.toLowerCase())) {
-          console.warn(`[AGENTS DEBUG] Filtering out player ${player.address} (chipBalance: ${player.chipBalance}) - NOT in contract events for gameId ${currentGameId}`);
-          return false;
-        }
-        // Chip balance should be between 0 and 500 (starting chips)
-        const chipBalance = player.chipBalance || 0;
-        if (chipBalance < 0 || chipBalance > 500) {
-          console.warn(`[AGENTS DEBUG] Filtering out player ${player.address} with invalid chipBalance: ${chipBalance}`);
-          return false;
-        }
-        console.log(`[AGENTS DEBUG] Keeping valid player: ${player.address} (chipBalance: ${chipBalance})`);
-        return true;
-      });
-      
-      console.log(`[AGENTS DEBUG] Final filtered players: ${gameStatus.players.length} -> ${validPlayers.length} (gameId: ${gameStatus.gameId}, currentGameId: ${currentGameId})`);
-      console.log(`[AGENTS DEBUG] Valid players:`, validPlayers.map(p => ({ address: p.address, chipBalance: p.chipBalance })));
-      
-      return validPlayers
-        .map((player) => ({
-        walletAddress: String(player.address || ''), // Ensure it's always a string
-        chipsLeft: player.chipBalance || 0,
-        cards: (player.cards || []).map((card: any) => {
-          // Handle both direct card format and raw format from API
-          const cardData = card.raw || card;
-          // Extract priceBought from API - this is the price paid in the auction
-          const priceBought = card.priceBought || 0;
-          return {
-            ...cardData,
-            name: cardData.name || card.name,
-            image: cardData.image || card.image,
-            attack: cardData.attack || card.attack || 0,
-            defense: cardData.defense || card.defense || 0,
-            strategist: cardData.strategist || card.strategist || 0,
-            type: card.type || cardData.type || "sentinel",
-            description: cardData.description || card.description || "",
-            chipsRequired: priceBought, // Use priceBought from API to show price paid
+    // Create a map of agent addresses to their cards from auctionedCards (only if game is in progress)
+    const agentCardsMap = new Map<string, any[]>();
+    
+    // Only map cards if game is in progress and we have auctionedCards
+    if (displayGameStatus?.gameState === "InProgress" && 
+        displayGameStatus?.auctionedCards &&
+        displayGameStatus.gameId === currentGameId) {
+      displayGameStatus.auctionedCards.forEach((auctioned: any) => {
+        if (auctioned.winner && auctioned.card) {
+          const winnerAddress = auctioned.winner.toLowerCase();
+          if (!agentCardsMap.has(winnerAddress)) {
+            agentCardsMap.set(winnerAddress, []);
+          }
+          const card = auctioned.card;
+          // Use pricePaid from auctionedCards (not bidAmount)
+          const pricePaid = auctioned.pricePaid !== undefined && auctioned.pricePaid !== null 
+            ? Number(auctioned.pricePaid) 
+            : 0;
+          const cardData = {
+            ...card,
+            name: card.name || card.raw?.name,
+            image: card.image || card.raw?.image,
+            attack: card.attack || card.raw?.attack || 0,
+            defense: card.defense || card.raw?.defense || 0,
+            strategist: card.strategist || card.raw?.strategist || 0,
+            type: card.type || card.raw?.type || "sentinel",
+            description: card.description || card.raw?.description || "",
+            chipsRequired: pricePaid, // Use pricePaid from auctionedCards
           };
-        }),
-      }));
-    }
-    
-    // If game is not started, use players from API (gameStartInfo.playersJoined)
-    // Cross-reference with contract events to ensure accuracy
-    if (!start && gameStartInfo?.playersJoined && gameStartInfo.playersJoined.length > 0) {
-      // Only use if we have a valid currentGameId (game exists)
-      if (currentGameId > 0) {
-        // CRITICAL: Wait for contract events if available, otherwise use API but log warning
-        let validAddresses = gameStartInfo.playersJoined;
-        if (playersFromEvents.length > 0) {
-          const eventAddresses = new Set(playersFromEvents.map(addr => addr.toLowerCase()));
-          validAddresses = gameStartInfo.playersJoined.filter(addr => 
-            addr && typeof addr === 'string' && 
-            addr !== '0x0000000000000000000000000000000000000000' &&
-            eventAddresses.has(addr.toLowerCase())
-          );
-          console.log(`[AGENTS DEBUG] Cross-referenced startInfo players: API=${gameStartInfo.playersJoined.length}, Events=${playersFromEvents.length}, Valid=${validAddresses.length}`);
-        } else {
-          // Filter out invalid addresses and limit to max 5 players (game limit)
-          validAddresses = gameStartInfo.playersJoined
-            .filter((address) => {
-              if (!address || typeof address !== 'string') return false;
-              if (address === '0x0000000000000000000000000000000000000000') return false;
-              return true;
-            })
-            .slice(0, 5); // Limit to 5 players max
-          console.warn(`[AGENTS DEBUG] No contract events for gameId ${currentGameId}, using API data (may include stale players)`);
+          agentCardsMap.get(winnerAddress)!.push(cardData);
         }
-        
-        console.log(`[AGENTS DEBUG] gameStartInfo players: ${gameStartInfo.playersJoined.length} -> ${validAddresses.length} (currentGameId: ${currentGameId})`);
-        
-        return validAddresses
-          .map((address) => ({
-          walletAddress: String(address || ''), // Ensure it's always a string
-          chipsLeft: 500, // Default starting chips
-          cards: [],
-        }));
-      }
+      });
     }
     
-    // Return empty array if no API data available
-    console.log(`[AGENTS DEBUG] No agents data available, returning empty array`);
-    return [];
-  }, [displayGameStatus?.players, displayGameStatus?.gameState, displayGameStatus?.gameId, gameStartInfo?.playersJoined, start, currentGameId, gameStatus, playersFromEvents]);
+    // Map agents from start-info API and attach cards from auctionedCards
+    return validPlayers.map((player) => {
+      const playerAddress = player.address.toLowerCase();
+      const cards = agentCardsMap.get(playerAddress) || [];
+      
+      return {
+        walletAddress: String(player.address || ''),
+        chipsLeft: player.chipBalance || 0,
+        cards: cards,
+      };
+    });
+  }, [gameStartInfo?.playersJoined, displayGameStatus?.auctionedCards, displayGameStatus?.gameState, displayGameStatus?.gameId, currentGameId]);
 
   // Get members and pool - use agentsData.length (filtered list) instead of raw API data
   // This ensures we only count valid players from the current game
   const membersJoined = agentsData.length;
   
-  // Calculate total pool: always calculate from spent chips (increases as game progresses)
-  const totalPool = agentsData.reduce((sum, agent) => {
-    const startingChips = 500;
-    const spent = startingChips - agent.chipsLeft;
-    return sum + spent;
-  }, 0);
+  // Calculate total pool: static calculation (agents joined x 10 MON entry fee)
+  const totalPool = membersJoined * 10;
 
   // Calculate remaining cards from API - group by type - memoized with specific dependencies
   const remainingCardsData = useMemo(() => {
@@ -1454,7 +1345,7 @@ export default function TournamentPage() {
                                   strategist={card.strategist || card.raw?.strategist || 0}
                                   type={(card.type || card.raw?.type || "sentinel") as "defender" | "attacker" | "sentinel" | "strategist"}
                                   description={card.description || card.raw?.description || ""}
-                                  chipsRequired={card.chipsRequired}
+                                  chipsRequired={card.chipsRequired !== undefined ? card.chipsRequired : 0}
                                   isSmall={true}
                                   tagPosition="bottom-center"
                                   tagColor="green"

@@ -16,12 +16,12 @@ Goal: Build the strongest 5-card team → highest team score wins the entire pot
 ## Smart Contract Integration
 
 ### Contract Address
-**Game Contract:** `0x6B9afDe0d0ab03a2c2aB65ad8b5E7C86A17257CA`
+**Game Contract:** `0x7e92D49C7B68E72DCd47Be223f9759f07AFe0eec`
 
 ### Join Game Function
 **ABI (one line):** `{"inputs":[],"name":"joinGame","outputs":[],"stateMutability":"payable","type":"function"}`
 
-**Contract Address:** `0x6B9afDe0d0ab03a2c2aB65ad8b5E7C86A17257CA`
+**Contract Address:** `0x7e92D49C7B68E72DCd47Be223f9759f07AFe0eec`
 
 ### Entry Fee
 **Entry Fee:** 10 MON (native gas token)

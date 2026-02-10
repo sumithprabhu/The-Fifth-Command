@@ -77,8 +77,13 @@ export async function getBidLog(gameId: number, round: number): Promise<any[]> {
 }
 
 export interface GameStartInfo {
-  status: "waiting" | "starting" | "started";
-  playersJoined: string[];
+  status: "ready" | "waiting" | "starting" | "started";
+  playersJoined: Array<{
+    address: string;
+    chipBalance: number;
+    cardsOwned: number;
+    cards: any[];
+  }>;
   minPlayersRequired: number;
   gameStartsInSeconds: number | null;
 }

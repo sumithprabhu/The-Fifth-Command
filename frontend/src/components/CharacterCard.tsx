@@ -82,8 +82,8 @@ function CharacterCard({
         border: `6px solid ${borderColor}`,
       }}
     >
-      {/* Price Tag - Shows price paid for the card */}
-      {chipsRequired !== undefined && chipsRequired !== null && (
+      {/* Price Tag - Shows price paid for the card (always show, even if 0) */}
+      {(chipsRequired !== undefined && chipsRequired !== null) && (
         <div 
           className={`absolute z-20 rounded-full ${tagPosition === 'bottom-center' ? 'left-1/2 transform -translate-x-1/2' : '-top-2 -right-2'}`}
           style={{
@@ -93,9 +93,12 @@ function CharacterCard({
             bottom: tagPosition === 'bottom-center' ? '20px' : 'auto',
             padding: isSmall ? '6px 12px' : '4px 8px',
             fontSize: isSmall ? '1.75rem' : '0.75rem',
+            whiteSpace: 'nowrap',
+            display: 'inline-flex',
+            alignItems: 'center',
           }}
         >
-          <span className="text-white font-bold" style={{ fontSize: isSmall ? '1.75rem' : '0.75rem' }}>
+          <span className="text-white font-bold whitespace-nowrap" style={{ fontSize: isSmall ? '1.75rem' : '0.75rem' }}>
             {chipsRequired} chips
           </span>
         </div>
