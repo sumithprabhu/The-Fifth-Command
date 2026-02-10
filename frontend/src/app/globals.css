@@ -208,3 +208,29 @@ html {
   scrollbar-color: #c28ff3 #1a1a1a;
 }
 
+/* Card shake animation - shakes from bottom center */
+@keyframes card-shake {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  12.5% {
+    transform: rotate(-15deg);
+  }
+  25% {
+    transform: rotate(15deg);
+  }
+  37.5% {
+    transform: rotate(-15deg);
+  }
+  50% {
+    transform: rotate(15deg);
+  }
+  62.5%, 100% {
+    transform: rotate(0deg);
+  }
+}
+
+.card-shake {
+  animation: card-shake 1.5s ease-in-out;
+  transform-origin: bottom center;
+}

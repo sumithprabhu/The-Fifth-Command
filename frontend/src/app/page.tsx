@@ -248,43 +248,51 @@ export default function Home() {
             if (currentGameStatus && currentGameStatus.gameId === displayGameId) {
               // Status API has matching gameId
               if (currentGameStatus.gameState === "InProgress") {
-                // Game is live
+                // Game is live - pool = agents joined x 10 MON
+                const poolAmount = (agentCount * 10).toString();
                 tournamentCards.push({
                   gameId: displayGameId,
                   status: "live",
                   playersJoined: agentCount,
                   totalPlayers: 5,
-                  poolAmount: currentPot || "0",
+                  poolAmount: poolAmount,
                 });
               } else {
                 // Game exists in status API but not InProgress - treat as not started
+                // Pool = agents joined x 10 MON
+                const poolAmount = (agentCount * 10).toString();
                 tournamentCards.push({
                   gameId: displayGameId,
                   status: "notStarted",
                   playersJoined: agentCount,
                   totalPlayers: 5,
-                  poolAmount: "0",
+                  poolAmount: poolAmount,
                 });
               }
             } else {
               // Status API doesn't have matching gameId - not started
+              // Pool = agents joined x 10 MON
+              const poolAmount = (agentCount * 10).toString();
               tournamentCards.push({
                 gameId: displayGameId,
                 status: "notStarted",
                 playersJoined: agentCount,
                 totalPlayers: 5,
-                poolAmount: "0",
+                poolAmount: poolAmount,
               });
             }
           }
         } else {
           // No game has been started yet - first game
+          // Pool = agents joined x 10 MON
+          const agentsCount = startInfo?.playersJoined.length || 0;
+          const poolAmount = (agentsCount * 10).toString();
           tournamentCards.push({
             gameId: 1,
             status: "notStarted",
-            playersJoined: startInfo?.playersJoined.length || 0,
+            playersJoined: agentsCount,
             totalPlayers: 5,
-            poolAmount: "0",
+            poolAmount: poolAmount,
           });
         }
 
@@ -1357,9 +1365,9 @@ function Footer() {
                   </span>
                 </li>
                 <li>
-                  <a href="#faq" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                  <Link href="/support" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                     Support
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>
@@ -1381,14 +1389,14 @@ function Footer() {
                   </Link>
                 </li>
                 <li>
-                  <a href="#" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                  <Link href="/contact" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                     Contact Us
-                  </a>
+                  </Link>
                 </li>
                 <li>
-                  <a href="#" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                  <Link href="/team" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                     Team
-                  </a>
+                  </Link>
                 </li>
               </ul>
             </div>

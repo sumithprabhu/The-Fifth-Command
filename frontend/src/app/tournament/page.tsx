@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CharacterCard from "@/components/CharacterCard";
 import charMeta from "@/char_meta.json";
 import Marquee from "react-fast-marquee";
@@ -39,6 +39,29 @@ interface GameStatus {
   remainingCards: any[];
 }
 
+type GamePhase = 'idle' | 'loading' | 'inProgress' | 'finished' | 'confirming' | 'nextRound';
+
+// Determine phase from game status - API is source of truth
+const determinePhase = (status: GameStatus | null, hasWinnerData: boolean, wasWatching: boolean): GamePhase => {
+  if (!status) return 'loading';
+  
+  switch (status.gameState) {
+    case 'NotStarted':
+      return 'idle';
+    case 'InProgress':
+      return 'inProgress';
+    case 'Finished':
+      // If we have winner data and user was watching, ready for next round
+      if (hasWinnerData && wasWatching) return 'nextRound';
+      // If game finished but no winner data yet, we're confirming from contract
+      if (!hasWinnerData) return 'confirming';
+      // If we have winner data but user wasn't watching, still go to nextRound (but won't show modal)
+      return 'nextRound';
+    default:
+      return 'idle';
+  }
+};
+
 export default function TournamentPage() {
   // Toggle flags for testing with dummy data
   const isGameStarted = false; // Set to true to show dummy game started data
@@ -51,20 +74,29 @@ export default function TournamentPage() {
   const [loading, setLoading] = useState(true);
   const [openSets, setOpenSets] = useState<string[]>([]);
   const [openAgents, setOpenAgents] = useState<string[]>([]);
-  // winnerDeclared stores the gameId once winner is declared - NEVER resets to allow showing winner modal
-  const [winnerDeclared, setWinnerDeclared] = useState<{ declared: boolean; gameId: number | null }>({ declared: false, gameId: null });
+  
+  // Single authoritative phase state
+  const [phase, setPhase] = useState<GamePhase>('loading');
+  
+  // Winner data
   const [winnerData, setWinnerData] = useState<{ address: string; poolAmount: string } | null>(null);
+  const [finishedGameState, setFinishedGameState] = useState<{ gameStatus: GameStatus; gameId: number } | null>(null);
+  
+  // Refs for tracking
   const confettiTriggered = useRef(false);
   const winnerPollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const wasWatchingWhenFinished = useRef(false);
+  const previousGameId = useRef<number>(0);
+  
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [gameStartCountdown, setGameStartCountdown] = useState<number | null>(null);
   const [currentRoundBids, setCurrentRoundBids] = useState<any[]>([]);
   const [bidPlacedItems, setBidPlacedItems] = useState<any[]>([]); // Store bid placed items for ticker
   const previousBidAmount = useRef<number>(0);
   const previousRound = useRef<number>(0);
-  // Store finished game state to prevent reset until contract confirms
-  const [finishedGameState, setFinishedGameState] = useState<{ gameStatus: GameStatus; gameId: number } | null>(null);
-  const [waitingForContractConfirmation, setWaitingForContractConfirmation] = useState(false);
-  const shouldStopPolling = useRef(false); // Ref to track if we should stop polling
+  const previousCardId = useRef<number | null>(null);
+  const [cardShake, setCardShake] = useState(false);
+  const [showWinnerModal, setShowWinnerModal] = useState(false); // Debounced flag for winner modal
   const [chatMessages, setChatMessages] = useState([
     { id: 1, user: "Agent Alpha", message: "Good luck everyone!" },
     { id: 2, user: "Agent Beta", message: "Let's go!" },
@@ -72,44 +104,52 @@ export default function TournamentPage() {
 
   const primaryColor = "#c28ff3";
   
-  // MAIN POLLING: Fetch game status from API and currentGameId from contract
-  // This ONLY runs when NOT waiting for winner confirmation
+  // Reset game state function
+  const resetGameState = () => {
+    setWinnerData(null);
+    setFinishedGameState(null);
+    wasWatchingWhenFinished.current = false;
+    confettiTriggered.current = false;
+    setShowWinnerModal(false);
+  };
+  
+  // Event-driven callback when winner is confirmed
+  const handleWinnerConfirmed = useCallback((winner: { address: string; poolAmount: string }, gameId: number) => {
+    setWinnerData(winner);
+    setPhase('nextRound');
+    confettiTriggered.current = false;
+  }, []);
+  
+  // Transition guard: Reset state when gameId changes
   useEffect(() => {
-    // Skip API fetch if isGameStarted toggle is true (using dummy data)
-    if (isGameStarted) {
-      shouldStopPolling.current = false;
-      return;
+    if (previousGameId.current > 0 && previousGameId.current !== currentGameId && currentGameId > 0) {
+      console.log(`GameId changed from ${previousGameId.current} to ${currentGameId}, resetting state`);
+      resetGameState();
+      setPhase('loading'); // Reset to loading to fetch new game data
     }
-    
-    // COMPLETELY STOP if we're waiting for winner confirmation
-    if (waitingForContractConfirmation) {
-      shouldStopPolling.current = true;
-      return;
-    }
-    
-    // Reset stop flag
-    shouldStopPolling.current = false;
+    previousGameId.current = currentGameId;
+  }, [currentGameId]);
+  
+  // Update phase based on game status (API is source of truth)
+  useEffect(() => {
+    const newPhase = determinePhase(gameStatus, !!winnerData, wasWatchingWhenFinished.current);
+    setPhase(newPhase);
+  }, [gameStatus, winnerData]);
+
+  // Custom hook for game polling - phase-driven
+  useEffect(() => {
+    if (isGameStarted) return;
     
     let isInitialLoad = true;
     let intervalId: NodeJS.Timeout | null = null;
     
     async function fetchData() {
-      // Check ref - if stop flag was set, stop immediately
-      if (shouldStopPolling.current || waitingForContractConfirmation) {
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-        return;
-      }
-      
       try {
         if (isInitialLoad) {
           setLoading(true);
         }
         
         // Fetch API status, contract gameId, and game start info in parallel
-        // Handle RPC errors gracefully - use API gameId as fallback
         let gameId: bigint | null = null;
         try {
           gameId = await getCurrentGameId();
@@ -122,112 +162,54 @@ export default function TournamentPage() {
           getGameStartInfo()
         ]);
         
-        // Use API gameId if contract call failed
         const gameIdNum = gameId ? Number(gameId) : (status?.gameId || 0);
+        setCurrentGameId(gameIdNum);
         
-        // Check if game just finished - store it and STOP all other polling
-        // BUT: If winner is already declared for this gameId, don't do anything - UI is locked
-        if (status?.gameState === "Finished" && status.gameId) {
-          // If winner already declared for this game, don't reset anything
-          if (winnerDeclared.declared && winnerDeclared.gameId === status.gameId) {
-            if (isInitialLoad) {
-              setLoading(false);
-            }
-            return; // UI is locked, don't change anything
-          }
-          
-          // Set stop flag immediately
-          shouldStopPolling.current = true;
-          
-          // Store the finished game state - NEVER clear this once winner is declared
-          setFinishedGameState({ gameStatus: status as GameStatus, gameId: status.gameId });
-          setWaitingForContractConfirmation(true);
-          setCurrentGameId(status.gameId);
-          
-          // Stop the interval immediately
-          if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
-          
-          // Immediately check past games and GameFinalized event
-          checkForWinnerConfirmation(status.gameId).catch(err => console.error("Error checking winner:", err));
-          
-          // STOP - don't update anything else
-          if (isInitialLoad) {
-            setLoading(false);
-          }
-          return;
-        }
-        
-        // If winner is declared, don't update gameStatus - keep showing finished state
-        if (winnerDeclared.declared && winnerDeclared.gameId && finishedGameState && finishedGameState.gameId === winnerDeclared.gameId) {
-          // UI is locked to finished state - don't update
-          if (isInitialLoad) {
-            setLoading(false);
-          }
-          return;
-        }
-        
-        // Check stop flag again after async operations
-        if (shouldStopPolling.current || waitingForContractConfirmation) {
-          if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
-          if (isInitialLoad) {
-            setLoading(false);
-          }
-          return;
-        }
-        
-        // Update currentGameId first
-        setCurrentGameId((prevId) => {
-          if (prevId !== gameIdNum) {
-            // If gameId changed, clear stale game status and start info to prevent showing players from previous games
-            if (prevId > 0 && gameIdNum !== prevId) {
-              console.log(`GameId changed from ${prevId} to ${gameIdNum}, clearing stale data`);
-              setGameStatus(null);
-              setGameStartInfo(null);
-            }
-            return gameIdNum;
-          }
-          return prevId;
-        });
-        
-        // Always update game start info - it's always for the current game
-        // We'll prioritize it in agentsData logic, but keep it updated
+        // Update game start info
         setGameStartInfo((prevInfo) => {
-          // Only update if data actually changed
           if (!prevInfo || JSON.stringify(prevInfo) !== JSON.stringify(startInfo)) {
+            if (startInfo.gameStartsInSeconds !== null && startInfo.gameStartsInSeconds > 0) {
+              setGameStartCountdown(startInfo.gameStartsInSeconds);
+            } else {
+              setGameStartCountdown(null);
+            }
             return startInfo;
           }
           return prevInfo;
         });
         
-        // Agents are now fetched from API (gameStartInfo.playersJoined) - no RPC calls needed
-        
-        // Update state if data actually changed AND gameId matches
-        // CRITICAL: Only use gameStatus if gameId matches currentGameId to prevent showing players from previous games
+        // Update game status - phase will be derived from this
         setGameStatus((prevStatus) => {
-          // Verify gameId matches before updating
           if (status?.gameId && gameIdNum > 0 && status.gameId !== gameIdNum) {
-            console.warn(`[AGENTS DEBUG] Ignoring gameStatus with mismatched gameId: API gameId ${status.gameId} != currentGameId ${gameIdNum}`);
-            return prevStatus; // Keep previous status if gameId doesn't match
+            console.warn(`Ignoring gameStatus with mismatched gameId: ${status.gameId} != ${gameIdNum}`);
+            return prevStatus;
           }
           
-          // Game status updated - agents come from gameStartInfo API
-          
-          // Compare game status to detect changes
           if (!prevStatus || JSON.stringify(prevStatus) !== JSON.stringify(status)) {
-            console.log(`[AGENTS DEBUG] Updating gameStatus: gameId=${status?.gameId}, players=${status?.players?.length || 0}`);
             return status as GameStatus;
           }
           return prevStatus;
         });
+        
+        // Handle finished state transition
+        if (status?.gameState === "Finished" && status.gameId) {
+          // If initial load and game already finished, user wasn't watching
+          if (isInitialLoad) {
+            setLoading(false);
+            wasWatchingWhenFinished.current = false; // User wasn't watching on page load
+            return;
+          }
+          
+          // Store finished state and mark user as watching (game finished while they were on page)
+          if (!finishedGameState || finishedGameState.gameId !== status.gameId) {
+            setFinishedGameState({ gameStatus: status as GameStatus, gameId: status.gameId });
+            wasWatchingWhenFinished.current = true;
+          }
+          
+          // Phase will automatically update to 'confirming' via useEffect
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
-        // Only set to null on initial load error
         if (isInitialLoad) {
           setGameStatus(null);
           setCurrentGameId(0);
@@ -239,20 +221,18 @@ export default function TournamentPage() {
         }
       }
     }
-
-    fetchData();
-    // Poll every 5 seconds for updates
-    intervalId = setInterval(() => {
-      // Check ref and state before each poll
-      if (shouldStopPolling.current || waitingForContractConfirmation) {
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-        return;
-      }
+    
+    // Phase-driven polling control
+    if (phase === 'idle' || phase === 'inProgress' || phase === 'loading' || phase === 'nextRound') {
       fetchData();
-    }, 5000);
+      intervalId = setInterval(fetchData, 5000);
+    } else if (phase === 'finished' || phase === 'confirming') {
+      // Stop API polling, contract polling will handle winner confirmation
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    }
     
     return () => {
       if (intervalId) {
@@ -260,12 +240,31 @@ export default function TournamentPage() {
         intervalId = null;
       }
     };
-  }, [isGameStarted, waitingForContractConfirmation]);
+  }, [phase, isGameStarted]);
 
-  // Function to check for winner confirmation from contract
-  // Uses both GameFinalized event and past games to find the winner
-  const checkForWinnerConfirmation = async (gameId: number) => {
-    if (winnerDeclared.declared && winnerDeclared.gameId === gameId) return; // Already declared for this game
+  // Countdown timer for game start
+  useEffect(() => {
+    if (gameStartCountdown === null || gameStartCountdown <= 0) {
+      return;
+    }
+
+    const countdownInterval = setInterval(() => {
+      setGameStartCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(countdownInterval);
+    };
+  }, [gameStartCountdown]);
+
+  // Function to check for winner confirmation from contract - event-driven
+  const checkForWinnerConfirmation = useCallback(async (gameId: number) => {
+    if (winnerData) return; // Already confirmed
     
     try {
       // Method 1: Check GameFinalized event
@@ -274,49 +273,34 @@ export default function TournamentPage() {
         const poolAmount = ethers.formatEther(finalizedEvent.potPaid);
         const formattedAmount = parseFloat(poolAmount).toFixed(2);
         
-        setWinnerData({
+        handleWinnerConfirmed({
           address: finalizedEvent.winner,
           poolAmount: formattedAmount
-        });
-        
-        // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
-        setWinnerDeclared({ declared: true, gameId: gameId });
-        confettiTriggered.current = false;
-        setWaitingForContractConfirmation(false);
-        // DO NOT clear finishedGameState - keep it so UI always shows finished state
-        shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+        }, gameId);
         
         console.log('Winner confirmed from GameFinalized event:', finalizedEvent);
         return;
       }
       
-      // Method 2: Check past games - use gameId - 1 as index (gameId is 1-indexed, array is 0-indexed)
+      // Method 2: Check past games
       try {
-        const pastGameIndex = gameId - 1; // gameId 1 = index 0, gameId 2 = index 1, etc.
+        const pastGameIndex = gameId - 1;
         const pastGame = await getPastGame(pastGameIndex);
         if (Number(pastGame.gameId) === gameId && pastGame.winner && pastGame.winner !== ethers.ZeroAddress) {
-          // Found the game in past games with a winner!
           const poolAmount = ethers.formatEther(pastGame.potPaid);
           const formattedAmount = parseFloat(poolAmount).toFixed(2);
           
-          setWinnerData({
+          handleWinnerConfirmed({
             address: pastGame.winner,
             poolAmount: formattedAmount
-          });
-          
-          // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
-          setWinnerDeclared({ declared: true, gameId: gameId });
-          confettiTriggered.current = false;
-          setWaitingForContractConfirmation(false);
-          // DO NOT clear finishedGameState - keep it so UI always shows finished state
-          shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+          }, gameId);
           
           console.log('Winner confirmed from past games (index', pastGameIndex, '):', pastGame);
           return;
         }
       } catch (error) {
         console.error(`Error checking past game at index ${gameId - 1}:`, error);
-        // If direct index fails, try searching all past games as fallback
+        // Fallback: search all past games
         try {
           const pastGamesCount = await getPastGamesCount();
           for (let i = 0; i < pastGamesCount; i++) {
@@ -326,17 +310,10 @@ export default function TournamentPage() {
                 const poolAmount = ethers.formatEther(pastGame.potPaid);
                 const formattedAmount = parseFloat(poolAmount).toFixed(2);
                 
-                setWinnerData({
+                handleWinnerConfirmed({
                   address: pastGame.winner,
                   poolAmount: formattedAmount
-                });
-                
-                // Set winner declared with gameId - NEVER clear finishedGameState so UI never resets
-                setWinnerDeclared({ declared: true, gameId: gameId });
-                confettiTriggered.current = false;
-                setWaitingForContractConfirmation(false);
-                // DO NOT clear finishedGameState - keep it so UI always shows finished state
-                shouldStopPolling.current = false; // Reset stop flag to allow polling to resume
+                }, gameId);
                 
                 console.log('Winner confirmed from past games (fallback search, index', i, '):', pastGame);
                 return;
@@ -352,21 +329,17 @@ export default function TournamentPage() {
     } catch (error) {
       console.error("Error checking for winner confirmation:", error);
     }
-  };
+  }, [winnerData, handleWinnerConfirmed]);
 
-  // Use finishedGameState if waiting for confirmation OR if winner is already declared
-  // This prevents UI from resetting when new game starts before contract confirms winner
-  // ONCE WINNER IS DECLARED, NEVER RESET - always show finished game state
-  const displayGameStatus = (winnerDeclared.declared && winnerDeclared.gameId && finishedGameState && finishedGameState.gameId === winnerDeclared.gameId)
-    ? finishedGameState.gameStatus
-    : (waitingForContractConfirmation && finishedGameState)
+  // Display game status - use finished state if in confirming/nextRound phase
+  const displayGameStatus = (phase === 'confirming' || phase === 'nextRound') && finishedGameState
     ? finishedGameState.gameStatus
     : gameStatus;
 
   // Monitor bid changes and fetch bid log when bid changes
   useEffect(() => {
-    // STOP polling if waiting for winner confirmation
-    if (waitingForContractConfirmation) {
+    // STOP polling if in confirming phase
+    if (phase === 'confirming' || phase === 'nextRound') {
       setBidPlacedItems([]);
       previousBidAmount.current = 0;
       previousRound.current = 0;
@@ -474,6 +447,26 @@ export default function TournamentPage() {
     return () => clearInterval(timer);
   }, [displayGameStatus?.roundEndsInSeconds, displayGameStatus?.currentRound]); // Reset when round changes
 
+  // Detect new card and trigger shake animation
+  useEffect(() => {
+    if (displayGameStatus?.currentCard?.id) {
+      const currentCardId = displayGameStatus.currentCard.id;
+      
+      // If card ID changed, trigger shake animation
+      if (previousCardId.current !== null && previousCardId.current !== currentCardId) {
+        setCardShake(true);
+        // Reset shake after animation completes
+        setTimeout(() => {
+          setCardShake(false);
+        }, 1500); // Match animation duration (1.5s)
+      }
+      
+      previousCardId.current = currentCardId;
+    } else {
+      previousCardId.current = null;
+    }
+  }, [displayGameStatus?.currentCard?.id]);
+
   // Format time as MM:SS
   const formatTime = (seconds: number | null): string => {
     if (seconds === null || seconds < 0) return "00:00";
@@ -483,7 +476,7 @@ export default function TournamentPage() {
   };
     
   const start = isGameStarted || displayGameStatus?.gameState === "InProgress";
-  const winnerDeclaredCheck = isWinnerDeclared || winnerDeclared.declared || displayGameStatus?.gameState === "Finished"; // Check if winner is declared (game finished)
+  const winnerDeclaredCheck = isWinnerDeclared || phase === 'nextRound' || displayGameStatus?.gameState === "Finished"; // Check if winner is declared (game finished)
   
   // Initialize dummy data if isGameStarted toggle is set
   // This should override any API data when toggle is true
@@ -584,25 +577,24 @@ export default function TournamentPage() {
   }, [isGameStarted]);
   
   // Check if winner is declared (game finished) - similar to start check
-  // Only trigger if isWinnerDeclared toggle is true
+  // Only trigger if isWinnerDeclared toggle is true (for testing)
   useEffect(() => {
     // Reset winner state when toggle is false (but only if it was set by toggle, not by actual game)
-    if (!isWinnerDeclared && winnerDeclared.declared && !finishedGameState) {
-      setWinnerDeclared({ declared: false, gameId: null });
-      setWinnerData(null);
-      confettiTriggered.current = false;
+    if (!isWinnerDeclared && phase === 'nextRound' && !finishedGameState) {
+      resetGameState();
+      setPhase('idle');
       return;
     }
     
     // Only show if toggle is explicitly true - don't show if false
-    if (isWinnerDeclared && !winnerDeclared.declared && !confettiTriggered.current) {
+    if (isWinnerDeclared && phase !== 'nextRound' && !confettiTriggered.current) {
       // Set winner data (using dummy data for now)
       const dummyWinner = {
         address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
         poolAmount: "1250.00"
       };
       setWinnerData(dummyWinner);
-      setWinnerDeclared({ declared: true, gameId: currentGameId || null });
+      handleWinnerConfirmed(dummyWinner, currentGameId || 0);
       confettiTriggered.current = true;
       
       // Trigger confetti with violet colors
@@ -700,13 +692,14 @@ export default function TournamentPage() {
       }, 250);
     }
     */
-  }, [isWinnerDeclared, winnerDeclared]);
+  }, [isWinnerDeclared, phase, handleWinnerConfirmed, currentGameId]);
   
-  // Poll for winner confirmation when waiting
+  // Contract polling - phase-driven
   useEffect(() => {
-    // Skip if using dummy data or winner already declared
-    if (isGameStarted || isWinnerDeclared || winnerDeclared.declared || !waitingForContractConfirmation || !finishedGameState) {
-      // Clear any existing polling interval
+    if (isGameStarted || isWinnerDeclared) return;
+    
+    // Only poll contract when in 'confirming' phase
+    if (phase !== 'confirming' || !finishedGameState || winnerData) {
       if (winnerPollingInterval.current) {
         clearInterval(winnerPollingInterval.current);
         winnerPollingInterval.current = null;
@@ -716,40 +709,37 @@ export default function TournamentPage() {
     
     // Start polling for winner confirmation every 3 seconds
     const pollForWinner = async () => {
-      await checkForWinnerConfirmation(finishedGameState.gameId);
+      if (!winnerData && finishedGameState) {
+        await checkForWinnerConfirmation(finishedGameState.gameId);
+      }
     };
     
-    // Poll immediately, then every 3 seconds
     pollForWinner();
     winnerPollingInterval.current = setInterval(pollForWinner, 3000);
     
-    // Cleanup on unmount or when dependencies change
     return () => {
       if (winnerPollingInterval.current) {
         clearInterval(winnerPollingInterval.current);
         winnerPollingInterval.current = null;
       }
     };
-  }, [waitingForContractConfirmation, finishedGameState, isGameStarted, isWinnerDeclared]);
+  }, [phase, finishedGameState, winnerData, checkForWinnerConfirmation, isGameStarted, isWinnerDeclared]);
 
-  // Reset winner state when game is no longer Finished (new game started)
+  // Debounce winner modal - show when in nextRound phase and user was watching
   useEffect(() => {
-    // Only reset if not using dummy data and winner was declared
-    if (isGameStarted || isWinnerDeclared) {
-      return;
+    if (phase === 'nextRound' && winnerData && wasWatchingWhenFinished.current) {
+      const timer = setTimeout(() => {
+        setShowWinnerModal(true);
+      }, 500); // 500ms debounce
+      
+      return () => clearTimeout(timer);
+    } else {
+      setShowWinnerModal(false);
     }
-    
-    // If game state is not "Finished" but winner was declared, reset it
-    // This happens when a new game starts after a finished game
-    if (winnerDeclared.declared && displayGameStatus?.gameState && displayGameStatus.gameState !== "Finished") {
-      console.log('Game state changed from Finished, resetting winner state');
-      setWinnerDeclared({ declared: false, gameId: null });
-      setWinnerData(null);
-      setFinishedGameState(null);
-      setWaitingForContractConfirmation(false);
-      confettiTriggered.current = false;
-    }
-  }, [displayGameStatus?.gameState, isGameStarted, isWinnerDeclared, winnerDeclared.declared]);
+  }, [phase, winnerData]);
+
+  // Phase transitions are handled by determinePhase and gameId change guard
+  // No need for manual reset logic here
   
   // Function to manually test winner modal with dummy data (for testing)
   const testWinnerModal = () => {
@@ -757,8 +747,7 @@ export default function TournamentPage() {
       address: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
       poolAmount: "1250.00"
     };
-    setWinnerData(dummyWinner);
-    setWinnerDeclared({ declared: true, gameId: currentGameId || null });
+    handleWinnerConfirmed(dummyWinner, currentGameId || 0);
     confettiTriggered.current = true;
     
     // Trigger confetti
@@ -1042,8 +1031,8 @@ export default function TournamentPage() {
 
   return (
     <>
-      {/* Winner Modal - Show when winner is declared AND game is currently Finished */}
-      {(isWinnerDeclared || (winnerDeclared.declared && displayGameStatus?.gameState === "Finished")) && winnerData && (
+      {/* Winner Modal - Show ONLY if user was actively watching when game finished */}
+      {showWinnerModal && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -1103,9 +1092,10 @@ export default function TournamentPage() {
             
             <button
               onClick={() => {
-                setWinnerDeclared({ declared: false, gameId: null });
-                setWinnerData(null);
-                confettiTriggered.current = false;
+                // Reset state and transition to idle
+                resetGameState();
+                setPhase('idle');
+                // Navigate to home
                 router.push('/');
               }}
               className="mt-8 w-full py-3 rounded-lg font-bold text-white transition-all hover:opacity-90"
@@ -1122,8 +1112,8 @@ export default function TournamentPage() {
       )}
       
     <div className="h-screen w-full flex flex-col overflow-hidden" style={{ backgroundColor: '#131313' }}>
-      {/* Winner Modal - Show when winner is declared AND game is currently Finished */}
-      {(isWinnerDeclared || (winnerDeclared.declared && displayGameStatus?.gameState === "Finished")) && winnerData && (
+      {/* Winner Modal - Show ONLY if user was actively watching when game finished */}
+      {showWinnerModal && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -1183,9 +1173,10 @@ export default function TournamentPage() {
             
             <button
               onClick={() => {
-                setWinnerDeclared({ declared: false, gameId: null });
-                setWinnerData(null);
-                confettiTriggered.current = false;
+                // Reset state and transition to idle
+                resetGameState();
+                setPhase('idle');
+                // Navigate to home
                 router.push('/');
               }}
               className="mt-8 w-full py-3 rounded-lg font-bold text-white transition-all hover:opacity-90"
@@ -1310,14 +1301,19 @@ export default function TournamentPage() {
                         overflow: 'visible'
                       }}
                     >
-                      <div 
-                        className="flex flex-wrap justify-evenly" 
-                        style={{ 
-                          gap: '15px',
-                          overflow: 'visible'
-                        }}
-                      >
-                        {agent.cards.map((card, index) => {
+                      {agent.cards.length === 0 ? (
+                        <div className="text-center py-8">
+                          <p className="text-white/70 text-sm">No cards yet</p>
+                        </div>
+                      ) : (
+                        <div 
+                          className="flex flex-wrap justify-evenly" 
+                          style={{ 
+                            gap: '15px',
+                            overflow: 'visible'
+                          }}
+                        >
+                          {agent.cards.map((card, index) => {
                           return (
                             <div
                               key={`${agent.walletAddress}-${index}`}
@@ -1354,7 +1350,8 @@ export default function TournamentPage() {
                             </div>
                           );
                         })}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1455,14 +1452,28 @@ export default function TournamentPage() {
         <div className="w-[50%] h-full overflow-hidden">
           <div className="rounded-lg p-6 w-full h-full flex items-center justify-center" style={{ backgroundColor: '#1a1a1a', border: `2px solid ${primaryColor}` }}>
             {!start ? (
-              <div className="flex items-center justify-center">
-                <p className="text-3xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                  Game is Yet to Start
-                </p>
+              <div className="flex flex-col items-center justify-center">
+                {gameStartCountdown !== null && gameStartCountdown > 0 ? (
+                  <>
+                    <p className="text-3xl font-bold text-white mb-2" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                      Game Starting In
+                    </p>
+                    <p className="text-5xl font-bold mb-4" style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: primaryColor }}>
+                      {gameStartCountdown}s
+                    </p>
+                    <p className="text-sm text-white/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                      Waiting buffer time for other players to join
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                    Game is Yet to Start
+                  </p>
+                )}
               </div>
             ) : displayGameStatus?.currentCard ? (
               <div className="flex flex-col items-center justify-center w-full">
-                <div className="w-80">
+                <div className={`w-80 ${cardShake ? 'card-shake' : ''}`}>
                   <CharacterCard
                     name={displayGameStatus.currentCard.name || displayGameStatus.currentCard.raw?.name || "Unknown"}
                     characterImage={displayGameStatus.currentCard.image || displayGameStatus.currentCard.raw?.image || ""}
