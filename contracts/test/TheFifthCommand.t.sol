@@ -248,7 +248,7 @@ contract TheFifthCommandTest is Test {
         vm.prank(owner);
         game.finalizeGame(nonPlayer); // invalid winner
 
-        assertEq(game.currentTotalPot(), INITIAL_FEE); // carried over
+        assertEq(game.currentTotalPot(), INITIAL_FEE - INITIAL_FEE * 10/100); // carried over
         assertEq(game.currentGameId(), 2);
     }
 
