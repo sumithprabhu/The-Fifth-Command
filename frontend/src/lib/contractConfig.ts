@@ -1,24 +1,23 @@
 // Contract configuration for The Fifth Command
-export const CONTRACT_ADDRESS = "0x07f89e2ffd961886d5718d8de3d874761217dC62";
+export const CONTRACT_ADDRESS = "0x6B9afDe0d0ab03a2c2aB65ad8b5E7C86A17257CA";
 
-export const RPC_URL = "https://arbitrum-sepolia.infura.io/v3/7b5f929ca303443fb2c9f2c29ee93a6b";
+export const RPC_URL = process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL 
 
 export const CONTRACT_ABI = [
 	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "initialOwner",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "_gameCurrencyToken",
-				"type": "address"
-			}
-		],
+		"inputs": [],
 		"stateMutability": "nonpayable",
 		"type": "constructor"
+	},
+	{
+		"inputs": [],
+		"name": "InvalidInitialization",
+		"type": "error"
+	},
+	{
+		"inputs": [],
+		"name": "NotInitializing",
+		"type": "error"
 	},
 	{
 		"inputs": [
@@ -40,17 +39,6 @@ export const CONTRACT_ABI = [
 			}
 		],
 		"name": "OwnableUnauthorizedAccount",
-		"type": "error"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "token",
-				"type": "address"
-			}
-		],
-		"name": "SafeERC20FailedOperation",
 		"type": "error"
 	},
 	{
@@ -121,7 +109,19 @@ export const CONTRACT_ABI = [
 			{
 				"indexed": false,
 				"internalType": "uint256",
-				"name": "pot",
+				"name": "potPaid",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "potCarriedOver",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "feeTaken",
 				"type": "uint256"
 			}
 		],
@@ -145,6 +145,32 @@ export const CONTRACT_ABI = [
 			}
 		],
 		"name": "GameStarted",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint64",
+				"name": "version",
+				"type": "uint64"
+			}
+		],
+		"name": "Initialized",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "newMax",
+				"type": "uint256"
+			}
+		],
+		"name": "MaxPlayersUpdated",
 		"type": "event"
 	},
 	{
@@ -189,6 +215,25 @@ export const CONTRACT_ABI = [
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "gameId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "player",
+				"type": "address"
+			}
+		],
+		"name": "PlayerLeft",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
 				"indexed": false,
 				"internalType": "uint256",
 				"name": "newChips",
@@ -196,6 +241,19 @@ export const CONTRACT_ABI = [
 			}
 		],
 		"name": "StartingChipsUpdated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "newTreasury",
+				"type": "address"
+			}
+		],
+		"name": "TreasuryWalletUpdated",
 		"type": "event"
 	},
 	{
@@ -405,19 +463,6 @@ export const CONTRACT_ABI = [
 	},
 	{
 		"inputs": [],
-		"name": "gameCurrencyToken",
-		"outputs": [
-			{
-				"internalType": "contract IERC20",
-				"name": "",
-				"type": "address"
-			}
-		],
-		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [],
 		"name": "getCurrentPlayerCount",
 		"outputs": [
 			{
@@ -453,7 +498,12 @@ export const CONTRACT_ABI = [
 					},
 					{
 						"internalType": "uint256",
-						"name": "potAmount",
+						"name": "potPaid",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "potCarriedOver",
 						"type": "uint256"
 					},
 					{
@@ -492,6 +542,24 @@ export const CONTRACT_ABI = [
 		"inputs": [
 			{
 				"internalType": "address",
+				"name": "initialOwner",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_treasuryWallet",
+				"type": "address"
+			}
+		],
+		"name": "initialize",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
 				"name": "",
 				"type": "address"
 			}
@@ -511,7 +579,27 @@ export const CONTRACT_ABI = [
 		"inputs": [],
 		"name": "joinGame",
 		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "leaveGame",
+		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "maxPlayers",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -549,7 +637,12 @@ export const CONTRACT_ABI = [
 			},
 			{
 				"internalType": "uint256",
-				"name": "potAmount",
+				"name": "potPaid",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "potCarriedOver",
 				"type": "uint256"
 			},
 			{
@@ -569,17 +662,12 @@ export const CONTRACT_ABI = [
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "token",
-				"type": "address"
-			},
-			{
 				"internalType": "uint256",
 				"name": "amount",
 				"type": "uint256"
 			}
 		],
-		"name": "recoverTokens",
+		"name": "recoverNative",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -608,11 +696,37 @@ export const CONTRACT_ABI = [
 		"inputs": [
 			{
 				"internalType": "uint256",
+				"name": "_maxPlayers",
+				"type": "uint256"
+			}
+		],
+		"name": "setMaxPlayers",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
 				"name": "newChips",
 				"type": "uint256"
 			}
 		],
 		"name": "setStartingChips",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_treasuryWallet",
+				"type": "address"
+			}
+		],
+		"name": "setTreasuryWallet",
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
@@ -678,6 +792,23 @@ export const CONTRACT_ABI = [
 		"outputs": [],
 		"stateMutability": "nonpayable",
 		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "treasuryWallet",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"stateMutability": "payable",
+		"type": "receive"
 	}
 ] as const;
 

@@ -411,7 +411,7 @@ export default function TournamentsPage() {
                         {tournament.status === "completed" ? "Won Pool Amount" : "Pool Amount"}
                       </p>
                       <p className="text-2xl text-white font-bold mb-4">
-                        {parseFloat(tournament.poolAmount).toFixed(2)} FIF
+                        {parseFloat(tournament.poolAmount).toFixed(2)} MON
                       </p>
                       {(tournament.status === "live" || tournament.status === "notStarted") && (
                         <Link href="/tournament">

@@ -173,7 +173,21 @@ export default function TournamentPage() {
           return;
         }
         
-        // Update game start info
+        // Update currentGameId first
+        setCurrentGameId((prevId) => {
+          if (prevId !== gameIdNum) {
+            // If gameId changed, clear stale game status and start info to prevent showing players from previous games
+            if (prevId > 0 && gameIdNum !== prevId) {
+              console.log(`GameId changed from ${prevId} to ${gameIdNum}, clearing stale data`);
+              setGameStatus(null);
+              setGameStartInfo(null);
+            }
+            return gameIdNum;
+          }
+          return prevId;
+        });
+        
+        // Update game start info - only if gameId matches (startInfo is always for current game)
         setGameStartInfo((prevInfo) => {
           if (!prevInfo || JSON.stringify(prevInfo) !== JSON.stringify(startInfo)) {
             return startInfo;
@@ -181,40 +195,59 @@ export default function TournamentPage() {
           return prevInfo;
         });
         
-        // Update state if data actually changed
-        setGameStatus((prevStatus) => {
-          // Compare game status to detect changes
-          if (!prevStatus || JSON.stringify(prevStatus) !== JSON.stringify(status)) {
-            return status as GameStatus;
+        // Always fetch players from events FIRST for current game to cross-reference with API data
+        // This ensures we only show players who actually joined the current game
+        // CRITICAL: Fetch events BEFORE updating gameStatus to prevent showing stale players
+        if (gameIdNum > 0 && (status?.gameState === "NotStarted" || status?.gameState === "InProgress")) {
+          try {
+            console.log(`[AGENTS DEBUG] Fetching players from events for gameId ${gameIdNum}...`);
+            const players = await getPlayersFromEvents(gameIdNum);
+            console.log(`[AGENTS DEBUG] Fetched ${players.length} players from events:`, players);
+            setPlayersFromEvents((prevPlayers) => {
+              // Only update if players list changed
+              if (JSON.stringify(prevPlayers) !== JSON.stringify(players)) {
+                console.log(`[AGENTS DEBUG] Updated playersFromEvents: ${prevPlayers.length} -> ${players.length}`);
+                return players;
+              }
+              return prevPlayers;
+            });
+          } catch (error) {
+            console.error(`[AGENTS DEBUG] Error fetching players from events for gameId ${gameIdNum}:`, error);
+            // Don't clear existing players on error, keep what we have
           }
-          return prevStatus;
-        });
-        
-        setCurrentGameId((prevId) => {
-          if (prevId !== gameIdNum) {
-            return gameIdNum;
-          }
-          return prevId;
-        });
-        
-        // If game is not started, fetch players from events
-        if (status?.gameState === "NotStarted" && gameIdNum > 0) {
-          const players = await getPlayersFromEvents(gameIdNum);
-          setPlayersFromEvents((prevPlayers) => {
-            // Only update if players list changed
-            if (JSON.stringify(prevPlayers) !== JSON.stringify(players)) {
-              return players;
-            }
-            return prevPlayers;
-          });
         } else {
+          // Clear players from events if game is finished or no gameId
           setPlayersFromEvents((prevPlayers) => {
             if (prevPlayers.length > 0) {
+              console.log(`[AGENTS DEBUG] Clearing playersFromEvents (game finished or no gameId)`);
               return [];
             }
             return prevPlayers;
           });
         }
+        
+        // Update state if data actually changed AND gameId matches
+        // CRITICAL: Only use gameStatus if gameId matches currentGameId to prevent showing players from previous games
+        setGameStatus((prevStatus) => {
+          // Verify gameId matches before updating
+          if (status?.gameId && gameIdNum > 0 && status.gameId !== gameIdNum) {
+            console.warn(`[AGENTS DEBUG] Ignoring gameStatus with mismatched gameId: API gameId ${status.gameId} != currentGameId ${gameIdNum}`);
+            return prevStatus; // Keep previous status if gameId doesn't match
+          }
+          
+          // Log API players data
+          if (status?.players) {
+            console.log(`[AGENTS DEBUG] API returned ${status.players.length} players for gameId ${status.gameId}:`, 
+              status.players.map(p => ({ address: p.address, chipBalance: p.chipBalance })));
+          }
+          
+          // Compare game status to detect changes
+          if (!prevStatus || JSON.stringify(prevStatus) !== JSON.stringify(status)) {
+            console.log(`[AGENTS DEBUG] Updating gameStatus: gameId=${status?.gameId}, players=${status?.players?.length || 0}`);
+            return status as GameStatus;
+          }
+          return prevStatus;
+        });
       } catch (error) {
         console.error("Error fetching data:", error);
         // Only set to null on initial load error
@@ -412,8 +445,8 @@ export default function TournamentPage() {
                 ? shortenAddress(latestBid.bidder || latestBid.address || latestBid.player) 
                 : "Unknown";
               const price = latestBid.amount || latestBid.bidAmount || latestBid.price 
-                ? `${latestBid.amount || latestBid.bidAmount || latestBid.price} pts` 
-                : "0 pts";
+                ? `${latestBid.amount || latestBid.bidAmount || latestBid.price} chips` 
+                : "0 chips";
               
               // Add to bid placed items
               setBidPlacedItems((prev) => {
@@ -722,6 +755,25 @@ export default function TournamentPage() {
       }
     };
   }, [waitingForContractConfirmation, finishedGameState, isGameStarted, isWinnerDeclared]);
+
+  // Reset winner state when game is no longer Finished (new game started)
+  useEffect(() => {
+    // Only reset if not using dummy data and winner was declared
+    if (isGameStarted || isWinnerDeclared) {
+      return;
+    }
+    
+    // If game state is not "Finished" but winner was declared, reset it
+    // This happens when a new game starts after a finished game
+    if (winnerDeclared.declared && displayGameStatus?.gameState && displayGameStatus.gameState !== "Finished") {
+      console.log('Game state changed from Finished, resetting winner state');
+      setWinnerDeclared({ declared: false, gameId: null });
+      setWinnerData(null);
+      setFinishedGameState(null);
+      setWaitingForContractConfirmation(false);
+      confettiTriggered.current = false;
+    }
+  }, [displayGameStatus?.gameState, isGameStarted, isWinnerDeclared, winnerDeclared.declared]);
   
   // Function to manually test winner modal with dummy data (for testing)
   const testWinnerModal = () => {
@@ -780,10 +832,20 @@ export default function TournamentPage() {
   };
 
   // Get current bid from API - use displayGameStatus to show finished game if waiting
-  const currentBid = displayGameStatus?.highestBid?.amount || 0;
+  // Ensure it's a proper integer to prevent display issues with SlotCounter
+  const currentBid = displayGameStatus?.highestBid?.amount 
+    ? Math.floor(Number(displayGameStatus.highestBid.amount)) 
+    : 0;
   const currentBidder = displayGameStatus?.highestBid?.bidder 
     ? shortenAddress(displayGameStatus.highestBid.bidder) 
     : "No bidder";
+  
+  // Debug log to track bid value changes
+  useEffect(() => {
+    if (displayGameStatus?.highestBid?.amount !== undefined) {
+      console.log(`[BID DEBUG] Raw amount: ${displayGameStatus.highestBid.amount}, Type: ${typeof displayGameStatus.highestBid.amount}, Converted: ${currentBid}`);
+    }
+  }, [displayGameStatus?.highestBid?.amount, currentBid]);
   
   // Get past bid from auctionedCards (last auctioned card)
   const pastBid = displayGameStatus?.auctionedCards && displayGameStatus.auctionedCards.length > 0
@@ -819,7 +881,7 @@ export default function TournamentPage() {
           const cardType = (card.type || card.raw?.type || "sentinel").toUpperCase();
           const cardName = card.name || card.raw?.name || "Unknown";
           const winner = auctioned.winner ? shortenAddress(auctioned.winner) : "Unknown";
-          const price = auctioned.pricePaid ? `${auctioned.pricePaid} pts` : (auctioned.bidAmount ? `${auctioned.bidAmount} pts` : "0 pts");
+          const price = auctioned.pricePaid ? `${auctioned.pricePaid} chips` : (auctioned.bidAmount ? `${auctioned.bidAmount} chips` : "0 chips");
           
           tickerItems.push({
             type: "win",
@@ -835,31 +897,88 @@ export default function TournamentPage() {
     return tickerItems.reverse();
   }, [bidPlacedItems, displayGameStatus?.auctionedCards]);
 
-  // Get members and pool from API only - no dummy data or contract events
-  // Use gameStartInfo.playersJoined when not started, gameStatus.players when in progress
-  const membersJoined = start 
-    ? (gameStatus?.players?.length || 0)
-    : (gameStartInfo?.playersJoined?.length || 0);
-  
-  // Calculate total pool: playersJoined.length * 10 FIF
-  const totalPool = gameStartInfo?.playersJoined.length 
-    ? gameStartInfo.playersJoined.length * 10 
-    : (gameStatus?.players.reduce((sum, p) => {
-        const startingChips = 500;
-        const spent = startingChips - (p.chipBalance || 0);
-        return sum + spent;
-      }, 0) || 0);
-
   // Convert API players data to agents data format - memoized with specific dependencies
-  // Always use API data - no dummy data or contract events
+  // IMPORTANT: Cross-reference with contract events to ensure we only show players from current game
   const agentsData = useMemo(() => {
+    console.log(`[AGENTS DEBUG] agentsData useMemo triggered:`, {
+      start,
+      gameStatusPlayers: gameStatus?.players?.length || 0,
+      gameStatusGameId: gameStatus?.gameId,
+      currentGameId,
+      playersFromEventsCount: playersFromEvents.length,
+      gameStartInfoPlayers: gameStartInfo?.playersJoined?.length || 0
+    });
+    
     // If game is in progress, use API players from gameStatus
+    // CRITICAL: Only use if gameId matches currentGameId AND cross-reference with contract events
     if (start && gameStatus?.players && gameStatus.players.length > 0) {
-      return gameStatus.players
-        .filter((player) => player.address && typeof player.address === 'string') // Filter out invalid addresses
+      // Verify gameId matches before using players
+      if (gameStatus.gameId && currentGameId > 0 && gameStatus.gameId !== currentGameId) {
+        console.warn(`[AGENTS DEBUG] GameId mismatch: API gameId ${gameStatus.gameId} != currentGameId ${currentGameId}, returning empty agents`);
+        return [];
+      }
+      
+      // CRITICAL: Don't show agents until we have contract events to cross-reference
+      // This prevents showing stale players from previous games
+      if (playersFromEvents.length === 0) {
+        console.log(`[AGENTS DEBUG] No contract events available yet for gameId ${currentGameId}, waiting... (API has ${gameStatus.players.length} players)`);
+        return []; // Return empty until we have events
+      }
+      
+      // Cross-reference with contract events to get actual players for current game
+      // Only show players that are in both API response AND contract events
+      const apiPlayerAddresses = new Set(
+        gameStatus.players
+          .filter((p) => p.address && typeof p.address === 'string' && p.address !== '0x0000000000000000000000000000000000000000')
+          .map((p) => p.address.toLowerCase())
+      );
+      
+      const eventPlayerAddresses = new Set(playersFromEvents.map(addr => addr.toLowerCase()));
+      const validPlayerAddresses = new Set(
+        Array.from(apiPlayerAddresses).filter(addr => eventPlayerAddresses.has(addr))
+      );
+      
+      console.log(`[AGENTS DEBUG] Cross-referencing players:`, {
+        apiPlayers: Array.from(apiPlayerAddresses),
+        eventPlayers: Array.from(eventPlayerAddresses),
+        validPlayers: Array.from(validPlayerAddresses),
+        apiCount: apiPlayerAddresses.size,
+        eventCount: eventPlayerAddresses.size,
+        validCount: validPlayerAddresses.size
+      });
+      
+      // Filter players to only those verified by contract events
+      const validPlayers = gameStatus.players.filter((player) => {
+        if (!player.address || typeof player.address !== 'string') {
+          console.log(`[AGENTS DEBUG] Filtering out player - invalid address:`, player.address);
+          return false;
+        }
+        if (player.address === '0x0000000000000000000000000000000000000000') {
+          console.log(`[AGENTS DEBUG] Filtering out player - zero address`);
+          return false;
+        }
+        // Must be in valid player addresses set (in contract events)
+        if (!validPlayerAddresses.has(player.address.toLowerCase())) {
+          console.warn(`[AGENTS DEBUG] Filtering out player ${player.address} (chipBalance: ${player.chipBalance}) - NOT in contract events for gameId ${currentGameId}`);
+          return false;
+        }
+        // Chip balance should be between 0 and 500 (starting chips)
+        const chipBalance = player.chipBalance || 0;
+        if (chipBalance < 0 || chipBalance > 500) {
+          console.warn(`[AGENTS DEBUG] Filtering out player ${player.address} with invalid chipBalance: ${chipBalance}`);
+          return false;
+        }
+        console.log(`[AGENTS DEBUG] Keeping valid player: ${player.address} (chipBalance: ${chipBalance})`);
+        return true;
+      });
+      
+      console.log(`[AGENTS DEBUG] Final filtered players: ${gameStatus.players.length} -> ${validPlayers.length} (gameId: ${gameStatus.gameId}, currentGameId: ${currentGameId})`);
+      console.log(`[AGENTS DEBUG] Valid players:`, validPlayers.map(p => ({ address: p.address, chipBalance: p.chipBalance })));
+      
+      return validPlayers
         .map((player) => ({
         walletAddress: String(player.address || ''), // Ensure it's always a string
-        pointsLeft: player.chipBalance || 0,
+        chipsLeft: player.chipBalance || 0,
         cards: (player.cards || []).map((card: any) => {
           // Handle both direct card format and raw format from API
           const cardData = card.raw || card;
@@ -874,27 +993,65 @@ export default function TournamentPage() {
             strategist: cardData.strategist || card.strategist || 0,
             type: card.type || cardData.type || "sentinel",
             description: cardData.description || card.description || "",
-            pointsRequired: priceBought, // Use priceBought from API to show price paid
+            chipsRequired: priceBought, // Use priceBought from API to show price paid
           };
         }),
       }));
     }
     
     // If game is not started, use players from API (gameStartInfo.playersJoined)
-    // This ensures we only use API data, not contract events
+    // Cross-reference with contract events to ensure accuracy
     if (!start && gameStartInfo?.playersJoined && gameStartInfo.playersJoined.length > 0) {
-      return gameStartInfo.playersJoined
-        .filter((address) => address && typeof address === 'string') // Filter out invalid addresses
-        .map((address) => ({
-        walletAddress: String(address || ''), // Ensure it's always a string
-        pointsLeft: 500, // Default starting chips
-        cards: [],
-      }));
+      // Only use if we have a valid currentGameId (game exists)
+      if (currentGameId > 0) {
+        // CRITICAL: Wait for contract events if available, otherwise use API but log warning
+        let validAddresses = gameStartInfo.playersJoined;
+        if (playersFromEvents.length > 0) {
+          const eventAddresses = new Set(playersFromEvents.map(addr => addr.toLowerCase()));
+          validAddresses = gameStartInfo.playersJoined.filter(addr => 
+            addr && typeof addr === 'string' && 
+            addr !== '0x0000000000000000000000000000000000000000' &&
+            eventAddresses.has(addr.toLowerCase())
+          );
+          console.log(`[AGENTS DEBUG] Cross-referenced startInfo players: API=${gameStartInfo.playersJoined.length}, Events=${playersFromEvents.length}, Valid=${validAddresses.length}`);
+        } else {
+          // Filter out invalid addresses and limit to max 5 players (game limit)
+          validAddresses = gameStartInfo.playersJoined
+            .filter((address) => {
+              if (!address || typeof address !== 'string') return false;
+              if (address === '0x0000000000000000000000000000000000000000') return false;
+              return true;
+            })
+            .slice(0, 5); // Limit to 5 players max
+          console.warn(`[AGENTS DEBUG] No contract events for gameId ${currentGameId}, using API data (may include stale players)`);
+        }
+        
+        console.log(`[AGENTS DEBUG] gameStartInfo players: ${gameStartInfo.playersJoined.length} -> ${validAddresses.length} (currentGameId: ${currentGameId})`);
+        
+        return validAddresses
+          .map((address) => ({
+          walletAddress: String(address || ''), // Ensure it's always a string
+          chipsLeft: 500, // Default starting chips
+          cards: [],
+        }));
+      }
     }
     
     // Return empty array if no API data available
+    console.log(`[AGENTS DEBUG] No agents data available, returning empty array`);
     return [];
-  }, [displayGameStatus?.players, displayGameStatus?.gameState, gameStartInfo?.playersJoined, start]);
+  }, [displayGameStatus?.players, displayGameStatus?.gameState, displayGameStatus?.gameId, gameStartInfo?.playersJoined, start, currentGameId, gameStatus, playersFromEvents]);
+
+  // Get members and pool - use agentsData.length (filtered list) instead of raw API data
+  // This ensures we only count valid players from the current game
+  const membersJoined = agentsData.length;
+  
+  // Calculate total pool: always calculate from spent chips (increases as game progresses)
+  const totalPool = agentsData.reduce((sum, agent) => {
+    const startingChips = 500;
+    const spent = startingChips - agent.chipsLeft;
+    return sum + spent;
+  }, 0);
 
   // Calculate remaining cards from API - group by type - memoized with specific dependencies
   const remainingCardsData = useMemo(() => {
@@ -994,8 +1151,8 @@ export default function TournamentPage() {
 
   return (
     <>
-      {/* Winner Modal - Show when winner is declared (either via toggle or actual game finish) */}
-      {(isWinnerDeclared || winnerDeclared.declared) && winnerData && (
+      {/* Winner Modal - Show when winner is declared AND game is currently Finished */}
+      {(isWinnerDeclared || (winnerDeclared.declared && displayGameStatus?.gameState === "Finished")) && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -1048,7 +1205,7 @@ export default function TournamentPage() {
                   className="text-4xl font-bold"
                   style={{ fontFamily: 'var(--font-orbitron), sans-serif', color: primaryColor }}
                 >
-                  {winnerData.poolAmount} FIF
+                  {winnerData.poolAmount} MON
                 </p>
               </div>
             </div>
@@ -1074,8 +1231,8 @@ export default function TournamentPage() {
       )}
       
     <div className="h-screen w-full flex flex-col overflow-hidden" style={{ backgroundColor: '#131313' }}>
-      {/* Winner Modal - Show when winner is declared (either via toggle or actual game finish) */}
-      {(isWinnerDeclared || winnerDeclared.declared) && winnerData && (
+      {/* Winner Modal - Show when winner is declared AND game is currently Finished */}
+      {(isWinnerDeclared || (winnerDeclared.declared && displayGameStatus?.gameState === "Finished")) && winnerData && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
@@ -1128,7 +1285,7 @@ export default function TournamentPage() {
                   className="text-4xl font-bold"
                   style={{ fontFamily: 'var(--font-orbitron), sans-serif', color: primaryColor }}
                 >
-                  {winnerData.poolAmount} FIF
+                  {winnerData.poolAmount} MON
                 </p>
               </div>
             </div>
@@ -1216,7 +1373,7 @@ export default function TournamentPage() {
                 <span className="px-3 py-1 rounded text-sm font-semibold whitespace-nowrap" style={{ border: `1px solid ${primaryColor}`, backgroundColor: 'rgba(194, 143, 243, 0.1)' }}>
                   {start ? `Agents Playing: ${membersJoined}/5` : `Agents: ${membersJoined}/5`}
                 </span>
-                <p className="text-lg font-bold text-white whitespace-nowrap">Pool: {totalPool} FIF</p>
+                <p className="text-lg font-bold text-white whitespace-nowrap">Pool: {totalPool} MON</p>
               </div>
             </div>
           </div>
@@ -1246,7 +1403,7 @@ export default function TournamentPage() {
                     <div className="flex items-center gap-3">
                       <span>{shortenAddress(agent.walletAddress)}</span>
                       <span className="px-2 py-1 rounded text-xs font-bold" style={{ border: `1px solid ${primaryColor}`, backgroundColor: 'rgba(194, 143, 243, 0.1)' }}>
-                        {agent.pointsLeft}/500
+                        {agent.chipsLeft}/500
                       </span>
                     </div>
                     <span>{openAgents.includes(agent.walletAddress) ? '▼' : '▶'}</span>
@@ -1297,7 +1454,7 @@ export default function TournamentPage() {
                                   strategist={card.strategist || card.raw?.strategist || 0}
                                   type={(card.type || card.raw?.type || "sentinel") as "defender" | "attacker" | "sentinel" | "strategist"}
                                   description={card.description || card.raw?.description || ""}
-                                  pointsRequired={card.pointsRequired}
+                                  chipsRequired={card.chipsRequired}
                                   isSmall={true}
                                   tagPosition="bottom-center"
                                   tagColor="green"
@@ -1438,13 +1595,14 @@ export default function TournamentPage() {
                       <div className="flex items-center justify-center mt-2">
                         <div className="text-4xl font-bold text-white">
                           <SlotCounter
-                            value={currentBid}
+                            key={`bid-${currentBid}-${displayGameStatus?.gameId || 0}-${displayGameStatus?.currentRound || 0}`}
+                            value={String(currentBid)}
                             duration={2}
                             startValue={0}
                             useMonospaceWidth={true}
                           />
                         </div>
-                        <span className="text-2xl font-semibold text-gray-400 ml-2">pts</span>
+                        <span className="text-2xl font-semibold text-gray-400 ml-2">chips</span>
                       </div>
                       <p className="text-sm text-gray-300 mt-2">
                         <span className="text-gray-400">Current Bidder:</span>{" "}
@@ -1500,7 +1658,8 @@ export default function TournamentPage() {
                       <div className="flex items-center justify-center">
                         <div className="text-3xl font-bold text-gray-400">
                           <SlotCounter
-                            value={remainingCards}
+                            key={`remaining-${remainingCards}-${displayGameStatus?.gameId || 0}-${displayGameStatus?.currentRound || 0}`}
+                            value={String(remainingCards)}
                             duration={2}
                             startValue={0}
                             useMonospaceWidth={true}

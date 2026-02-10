@@ -1,0 +1,4 @@
+# Testing folder - ignore all contents
+testing/*
+# Especially ignore session_safe.json (contains private keys!)
+testing/session_safe.json

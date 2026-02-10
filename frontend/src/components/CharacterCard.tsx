@@ -14,7 +14,7 @@ interface CharacterCardProps {
   strategist: number;
   type: CardType;
   description?: string;
-  pointsRequired?: number;
+  chipsRequired?: number;
   isSmall?: boolean;
   tagPosition?: 'top-right' | 'bottom-center';
   tagColor?: 'violet' | 'green';
@@ -28,7 +28,7 @@ function CharacterCard({
   strategist,
   type,
   description,
-  pointsRequired,
+  chipsRequired,
   isSmall = false,
   tagPosition = 'top-right',
   tagColor = 'violet',
@@ -83,7 +83,7 @@ function CharacterCard({
       }}
     >
       {/* Price Tag - Shows price paid for the card */}
-      {pointsRequired !== undefined && pointsRequired !== null && (
+      {chipsRequired !== undefined && chipsRequired !== null && (
         <div 
           className={`absolute z-20 rounded-full ${tagPosition === 'bottom-center' ? 'left-1/2 transform -translate-x-1/2' : '-top-2 -right-2'}`}
           style={{
@@ -96,7 +96,7 @@ function CharacterCard({
           }}
         >
           <span className="text-white font-bold" style={{ fontSize: isSmall ? '1.75rem' : '0.75rem' }}>
-            {pointsRequired} pts
+            {chipsRequired} chips
           </span>
         </div>
       )}

@@ -573,15 +573,35 @@ export default function Home() {
             {/* Navigation and CTA */}
             <div className="flex items-center gap-4 md:gap-6">
               <nav className="hidden items-center gap-5 text-sm font-bold text-white md:flex md:gap-6 md:text-base" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                <Link href="/tournament" className="hover:opacity-80 transition-opacity">
+                <a 
+                  href="#tournament" 
+                  className="hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const element = document.getElementById('tournament');
+                    if (element) {
+                      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                >
                   Tournament
-                </Link>
-                <a href="#faq" className="hover:opacity-80 transition-opacity">
+                </a>
+                <a 
+                  href="#faq" 
+                  className="hover:opacity-80 transition-opacity"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const element = document.getElementById('faq');
+                    if (element) {
+                      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                >
                   FAQ
                 </a>
               </nav>
               <Link 
-                href="/skill"
+                href="/skill.md"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="relative overflow-hidden rounded-full px-6 py-2.5 text-sm font-bold text-white transition-all hover:opacity-90 md:px-8 md:py-3 md:text-base inline-block"
@@ -727,17 +747,6 @@ export default function Home() {
                   <br />
                   <span className="text-5xl md:text-6xl lg:text-7xl">COMMAND?</span>
                 </h2>
-                <button 
-                  className="relative overflow-hidden rounded-lg px-8 py-4 text-base font-bold text-white transition-all hover:opacity-90 w-fit"
-                  style={{ 
-                    background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
-                    fontFamily: 'Arial, Helvetica, sans-serif',
-                    boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
-                  }}
-                >
-                  <span className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-50"></span>
-                  <span className="relative z-10">Check Our Roadmap</span>
-                </button>
               </div>
 
               {/* Right Side */}
@@ -774,7 +783,7 @@ export default function Home() {
                     <div className="rounded-lg p-6 flex flex-col gap-4 relative overflow-hidden h-full">
                       <div className="flex flex-col gap-2 relative z-10">
                         <h3 className="text-lg font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>ENTRY FEE</h3>
-                        <p className="text-2xl font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>10FIF</p>
+                        <p className="text-2xl font-bold text-black" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>10 MON</p>
                         <p className="text-sm font-bold text-black/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>each</p>
                       </div>
                       <div className="absolute right-0" style={{ bottom: '-10px', width: '60%', height: '100%' }}>
@@ -789,13 +798,13 @@ export default function Home() {
                     </div>
                   </FlipCard>
 
-                  {/* Card 3 - Starting Points (Black, row 1, column 4) */}
+                  {/* Card 3 - Starting Chips (Black, row 1, column 4) */}
                   <FlipCard backgroundColor="#1a1a1a">
                     <div className="rounded-lg p-6 flex flex-col gap-4 h-full">
                       <div className="flex flex-col gap-2">
                         <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>START WITH</h3>
                         <p className="text-2xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>500</p>
-                        <p className="text-sm font-bold text-white/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>points</p>
+                        <p className="text-sm font-bold text-white/70" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>chips</p>
                       </div>
                     </div>
                   </FlipCard>
@@ -816,7 +825,7 @@ export default function Home() {
                     <div className="rounded-lg p-6 flex flex-col gap-4 relative overflow-hidden h-full">
                       <div className="flex flex-col gap-2 relative z-10">
                         <h3 className="text-lg font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>PLAYTIME</h3>
-                        <p className="text-2xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>15 minutes</p>
+                        <p className="text-2xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>~15 minutes</p>
                         <p className="text-sm font-bold text-white/80" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontWeight: 'bold' }}>per round</p>
                       </div>
                       <div className="absolute right-0" style={{ bottom: '-10px', width: '60%', height: '100%' }}>
@@ -837,7 +846,7 @@ export default function Home() {
         </section>
 
         {/* Live Tournament Section */}
-        <section className="relative z-10 w-full px-6 py-16 md:px-12 md:py-24" style={{ backgroundColor: 'rgba(30, 20, 50, 0.95)' }}>
+        <section id="tournament" className="relative z-10 w-full px-6 py-16 md:px-12 md:py-24" style={{ backgroundColor: 'rgba(30, 20, 50, 0.95)' }}>
           <div className="max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
@@ -935,7 +944,7 @@ export default function Home() {
                           {tournament.status === "completed" ? "Won Pool Amount" : "Pool Amount"}
                         </p>
                         <p className="text-2xl text-white font-bold mb-4">
-                          {parseFloat(tournament.poolAmount).toFixed(2)} FIF
+                          {parseFloat(tournament.poolAmount).toFixed(2)} MON
                         </p>
                         {(tournament.status === "live" || tournament.status === "notStarted") && (
                           <Link href="/tournament">
@@ -1063,7 +1072,7 @@ function CloudVideoSection() {
             Let Your Agent Play It Today
           </h2>
           <Link 
-            href="/skill"
+            href="/skill.md"
             target="_blank"
             rel="noopener noreferrer"
             className="relative overflow-hidden rounded-lg px-8 py-4 text-base font-bold text-white transition-all hover:opacity-90 inline-block"
@@ -1208,7 +1217,7 @@ function FAQContent() {
   const faqs = [
     {
       question: "How do I join a tournament?",
-      answer: "To join a tournament, you need to pay the entry fee of 10FIF tokens. Once you join, you'll receive 500 starting chips to bid on cards during the auction rounds."
+      answer: "To join a tournament, you need to pay the entry fee of 10MON tokens. Once you join, you'll receive 500 starting chips to bid on cards during the auction rounds."
     },
     {
       question: "How does the bidding work?",
@@ -1348,16 +1357,6 @@ function Footer() {
                   </span>
                 </li>
                 <li>
-                  <a href="#benefits" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                    Download
-                  </a>
-                </li>
-                <li>
-                  <a href="#lore" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                    Demos
-                  </a>
-                </li>
-                <li>
                   <a href="#faq" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                     Support
                   </a>
@@ -1372,14 +1371,14 @@ function Footer() {
               </h3>
               <ul className="space-y-3">
                 <li>
-                  <a href="#roadmap" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-                    Token Sales
-                  </a>
+                  <Link href="/token" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                    Token
+                  </Link>
                 </li>
                 <li>
-                  <a href="#roadmap" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                  <Link href="/roadmap" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                     Roadmap
-                  </a>
+                  </Link>
                 </li>
                 <li>
                   <a href="#" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
