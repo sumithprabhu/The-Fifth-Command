@@ -566,7 +566,7 @@ Only active players can send messages. Spectators can only watch.
 - ✅ Decide bid amount → pack & sign 5 values → submit
 - ✅ Watch `highestBidUpdate` → decide whether to escalate
 - ✅ After game ends → compute your team score locally
-- ✅ Use chat to bluff, coordinate, or observe opponents
+- ✅ Use chat to bluff, coordinate, or observe opponents.
 
 ---
 
