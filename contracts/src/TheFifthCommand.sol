@@ -1,21 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract TheFifthCommand is Ownable {
-    using SafeERC20 for IERC20;
+contract TheFifthCommand is Initializable, OwnableUpgradeable {
+    uint256 public entryFee;
+    uint256 public startingChips;
+    uint256 public maxPlayers;
 
-    IERC20 public immutable gameCurrencyToken;
-
-    uint256 public entryFee = 10 * 10**18;
-    uint256 public startingChips = 500;
-    uint256 public maxPlayers = 5;
-
-    uint256 public constant MIN_ENTRY_FEE = 1 * 10**18;
-    uint256 public constant MAX_ENTRY_FEE = 100 * 10**18;
+    uint256 public constant MIN_ENTRY_FEE = 1 ether;
+    uint256 public constant MAX_ENTRY_FEE = 100 ether;
     uint256 public constant MIN_STARTING_CHIPS = 100;
     uint256 public constant MAX_STARTING_CHIPS = 5000;
 
@@ -25,8 +20,8 @@ contract TheFifthCommand is Ownable {
         Finished
     }
 
-    GameState public currentGameState = GameState.NotStarted;
-    uint256 public currentGameId = 1;
+    GameState public currentGameState;
+    uint256 public currentGameId;
     uint256 public currentTotalPot;
     uint256 public currentRound;
     uint256 public currentTotalCards;
@@ -47,21 +42,34 @@ contract TheFifthCommand is Ownable {
 
     GameResult[] public pastGames;
 
+    address public treasuryWallet;
+
     event PlayerJoined(uint256 indexed gameId, address indexed player);
     event PlayerLeft(uint256 indexed gameId, address indexed player);
     event GameStarted(uint256 indexed gameId, uint256 totalCards);
     event CardSettled(uint256 indexed gameId, uint256 round, uint256 cardId, address indexed winner, uint256 price);
-    event GameFinalized(uint256 indexed gameId, address indexed winner, uint256 potPaid, uint256 potCarriedOver);
+    event GameFinalized(
+        uint256 indexed gameId, address indexed winner, uint256 potPaid, uint256 potCarriedOver, uint256 feeTaken
+    );
     event MaxPlayersUpdated(uint256 newMax);
     event EntryFeeUpdated(uint256 newFee);
     event StartingChipsUpdated(uint256 newChips);
+    event TreasuryWalletUpdated(address newTreasury);
 
-    constructor(
-        address initialOwner,
-        address _gameCurrencyToken
-    ) Ownable(initialOwner) {
-        require(_gameCurrencyToken != address(0), "Invalid token");
-        gameCurrencyToken = IERC20(_gameCurrencyToken);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address initialOwner, address _treasuryWallet) external initializer {
+        __Ownable_init(initialOwner);
+
+        entryFee = 10 ether;
+        startingChips = 500;
+        maxPlayers = 5;
+        currentGameState = GameState.NotStarted;
+        currentGameId = 1;
+        treasuryWallet = _treasuryWallet;
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -75,16 +83,22 @@ contract TheFifthCommand is Ownable {
     }
 
     // ────────────────────────────────────────────────────────────────
-    // Join game — checks max players
+    // Setter for treasury wallet
     // ────────────────────────────────────────────────────────────────
-    function joinGame() external {
+    function setTreasuryWallet(address _treasuryWallet) external onlyOwner {
+        require(_treasuryWallet != address(0), "Invalid treasury");
+        treasuryWallet = _treasuryWallet;
+        emit TreasuryWalletUpdated(_treasuryWallet);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Join game
+    // ────────────────────────────────────────────────────────────────
+    function joinGame() external payable {
         require(currentGameState == GameState.NotStarted, "Game not open for joining");
         require(!isCurrentPlayer[msg.sender], "Already joined");
-        require(entryFee > 0, "Entry fee not set");
+        require(msg.value == entryFee, "Must send exact entry fee");
         require(currentPlayers.length < maxPlayers, "Game is full");
-
-        // Transfer tokens from player to contract
-        gameCurrencyToken.safeTransferFrom(msg.sender, address(this), entryFee);
 
         currentTotalPot += entryFee;
         currentChipBalance[msg.sender] = startingChips;
@@ -95,13 +109,13 @@ contract TheFifthCommand is Ownable {
     }
 
     // ────────────────────────────────────────────────────────────────
-    // Player can leave before game starts and get refund
+    // Leave before game starts — refund
     // ────────────────────────────────────────────────────────────────
     function leaveGame() external {
         require(currentGameState == GameState.NotStarted, "Game already started");
         require(isCurrentPlayer[msg.sender], "Not a player");
 
-        // Remove from players array (swap & pop)
+        // Remove from players array
         for (uint256 i = 0; i < currentPlayers.length; i++) {
             if (currentPlayers[i] == msg.sender) {
                 currentPlayers[i] = currentPlayers[currentPlayers.length - 1];
@@ -113,8 +127,8 @@ contract TheFifthCommand is Ownable {
         isCurrentPlayer[msg.sender] = false;
         currentChipBalance[msg.sender] = 0;
 
-        // Refund
-        gameCurrencyToken.safeTransfer(msg.sender, entryFee);
+        // Refund entry fee
+        payable(msg.sender).transfer(entryFee);
         currentTotalPot -= entryFee;
 
         emit PlayerLeft(currentGameId, msg.sender);
@@ -158,11 +172,7 @@ contract TheFifthCommand is Ownable {
     // ────────────────────────────────────────────────────────────────
     // Settle one card
     // ────────────────────────────────────────────────────────────────
-    function settleCard(
-        uint256 cardId,
-        address winner,
-        uint256 finalPrice
-    ) external onlyOwner {
+    function settleCard(uint256 cardId, address winner, uint256 finalPrice) external onlyOwner {
         require(currentGameState == GameState.InProgress, "No active game");
         require(currentRound <= currentTotalCards, "All cards done");
 
@@ -188,27 +198,35 @@ contract TheFifthCommand is Ownable {
     }
 
     // ────────────────────────────────────────────────────────────────
-    // Finalize game — pot carries over if no valid winner
-    // gameId increments here
+    // Finalize game
     // ────────────────────────────────────────────────────────────────
     function finalizeGame(address winner) external onlyOwner {
-        uint256 payout = currentTotalPot;
+        require(currentGameState == GameState.Finished, "Game not finished");
+
+        uint256 potBeforeFee = currentTotalPot;
+
+        uint256 fee = potBeforeFee * 10 / 100; // 10% fee
+        uint256 payout = potBeforeFee - fee;
 
         address recipient = address(0);
         uint256 potPaid = 0;
         uint256 potCarriedOver = 0;
 
+        if (fee > 0) {
+            payable(treasuryWallet).transfer(fee);
+        }
+
         if (isCurrentPlayer[winner]) {
             recipient = winner;
             potPaid = payout;
-            gameCurrencyToken.safeTransfer(winner, payout);
+            payable(winner).transfer(payout);
             currentTotalPot = 0;
         } else {
-            // No valid winner → carry over entire pot to next game
+            // No valid winner → carry over the pot
             recipient = address(0);
             potPaid = 0;
             potCarriedOver = payout;
-            // currentTotalPot remains unchanged — it becomes starting pot of next game
+            // currentTotalPot remains unchanged
         }
 
         pastGames.push(
@@ -222,9 +240,9 @@ contract TheFifthCommand is Ownable {
             })
         );
 
-        emit GameFinalized(currentGameId, recipient, potPaid, potCarriedOver);
+        emit GameFinalized(currentGameId, recipient, potPaid, potCarriedOver, fee);
 
-        // Increment gameId for the next game
+        // Increment gameId for next game
         currentGameId++;
 
         _resetCurrentGame();
@@ -259,8 +277,10 @@ contract TheFifthCommand is Ownable {
         return pastGames[index];
     }
 
-    // Recover stuck tokens (safety)
-    function recoverTokens(address token, uint256 amount) external onlyOwner {
-        IERC20(token).safeTransfer(owner(), amount);
+    // Recover stuck native tokens (safety)
+    function recoverNative(uint256 amount) external onlyOwner {
+        payable(owner()).transfer(amount);
     }
+
+    receive() external payable {}
 }

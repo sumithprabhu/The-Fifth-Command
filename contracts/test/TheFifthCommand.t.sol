@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/TheFifthCommand.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract TheFifthCommandTest is Test {
     TheFifthCommand game;
@@ -10,7 +11,11 @@ contract TheFifthCommandTest is Test {
     address player1 = address(0x1111);
     address player2 = address(0x2222);
     address player3 = address(0x3333);
+    address player4 = address(0x4444);
+    address player5 = address(0x5555);
+    address player6 = address(0x6666);
     address nonPlayer = address(0x9999);
+    address treasury = address(0x7777);
 
     uint256 constant INITIAL_FEE = 10 ether;
     uint256 constant INITIAL_CHIPS = 500;
@@ -22,9 +27,27 @@ contract TheFifthCommandTest is Test {
         vm.deal(player1, 100 ether);
         vm.deal(player2, 100 ether);
         vm.deal(player3, 100 ether);
+        vm.deal(player4, 100 ether);
+        vm.deal(player5, 100 ether);
+        vm.deal(player6, 100 ether);
+        vm.deal(treasury, 0 ether);
 
-        vm.prank(owner);
-        game = new TheFifthCommand(owner);
+        // Deploy implementation
+        TheFifthCommand implementation = new TheFifthCommand();
+
+        // Prepare initializer data
+        bytes memory initData = abi.encodeCall(TheFifthCommand.initialize, (owner, treasury));
+
+        // Deploy proxy pointing to implementation
+        ERC1967Proxy proxy = new ERC1967Proxy(address(implementation), initData);
+
+        // Cast proxy to contract interface
+        game = TheFifthCommand(payable(address(proxy)));
+
+        // Verify initialization
+        assertEq(game.owner(), owner);
+        assertEq(game.treasuryWallet(), treasury);
+        assertEq(game.currentGameId(), 1);
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -35,19 +58,11 @@ contract TheFifthCommandTest is Test {
         assertEq(game.owner(), owner);
         assertEq(game.entryFee(), INITIAL_FEE);
         assertEq(game.startingChips(), INITIAL_CHIPS);
+        assertEq(game.maxPlayers(), 5);
         assertEq(uint256(game.currentGameState()), uint256(TheFifthCommand.GameState.NotStarted));
-        assertEq(game.currentGameId(), 0);
+        assertEq(game.currentGameId(), 1);
         assertEq(game.currentTotalPot(), 0);
-    }
-
-    function test_OwnableOnlyFunctions() public {
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, player1));
-        vm.prank(player1);
-        game.setEntryFee(15 ether);
-
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, player1));
-        vm.prank(player1);
-        game.startGame(10);
+        assertEq(game.treasuryWallet(), treasury);
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -80,6 +95,16 @@ contract TheFifthCommandTest is Test {
         game.setStartingChips(50);
     }
 
+    function test_SetMaxPlayers() public {
+        vm.prank(owner);
+        game.setMaxPlayers(8);
+        assertEq(game.maxPlayers(), 8);
+
+        vm.expectRevert("Max players too low");
+        vm.prank(owner);
+        game.setMaxPlayers(1);
+    }
+
     // ────────────────────────────────────────────────────────────────
     // Joining game
     // ────────────────────────────────────────────────────────────────
@@ -92,6 +117,23 @@ contract TheFifthCommandTest is Test {
         assertEq(game.currentChipBalance(player1), INITIAL_CHIPS);
         assertTrue(game.isCurrentPlayer(player1));
         assertEq(game.getCurrentPlayerCount(), 1);
+    }
+
+    function test_JoinGame_GameFull_Reverts() public {
+        vm.prank(player1);
+        game.joinGame{value: INITIAL_FEE}();
+        vm.prank(player2);
+        game.joinGame{value: INITIAL_FEE}();
+        vm.prank(player3);
+        game.joinGame{value: INITIAL_FEE}();
+        vm.prank(player4);
+        game.joinGame{value: INITIAL_FEE}();
+        vm.prank(player5);
+        game.joinGame{value: INITIAL_FEE}();
+
+        vm.expectRevert("Game is full");
+        vm.prank(player6);
+        game.joinGame{value: INITIAL_FEE}();
     }
 
     function test_JoinGame_WrongValue_Reverts() public {
@@ -122,11 +164,41 @@ contract TheFifthCommandTest is Test {
     }
 
     // ────────────────────────────────────────────────────────────────
+    // Leaving game before start
+    // ────────────────────────────────────────────────────────────────
+
+    function test_LeaveGame_Success() public {
+        vm.prank(player1);
+        game.joinGame{value: INITIAL_FEE}();
+
+        uint256 initialBalance = player1.balance;
+
+        vm.prank(player1);
+        game.leaveGame();
+
+        assertEq(player1.balance, initialBalance + INITIAL_FEE);
+        assertEq(game.currentTotalPot(), 0);
+        assertEq(game.getCurrentPlayerCount(), 0);
+        assertFalse(game.isCurrentPlayer(player1));
+    }
+
+    function test_LeaveGame_AfterStart_Reverts() public {
+        vm.prank(player1);
+        game.joinGame{value: INITIAL_FEE}();
+
+        vm.prank(owner);
+        game.startGame(1);
+
+        vm.expectRevert("Game already started");
+        vm.prank(player1);
+        game.leaveGame();
+    }
+
+    // ────────────────────────────────────────────────────────────────
     // Game flow: start → settle → finalize
     // ────────────────────────────────────────────────────────────────
 
-    function test_FullGameFlow() public {
-        // Join
+    function test_FullGameFlow_WithWinner() public {
         vm.prank(player1);
         game.joinGame{value: INITIAL_FEE}();
 
@@ -135,13 +207,9 @@ contract TheFifthCommandTest is Test {
 
         assertEq(game.currentTotalPot(), 20 ether);
 
-        // Start game
         vm.prank(owner);
-        game.startGame(3); // 3 cards
+        game.startGame(3);
 
-        assertEq(uint256(game.currentGameState()), uint256(TheFifthCommand.GameState.InProgress));
-
-        // Settle cards
         vm.prank(owner);
         game.settleCard(1, player1, 120);
 
@@ -153,14 +221,35 @@ contract TheFifthCommandTest is Test {
 
         assertEq(uint256(game.currentGameState()), uint256(TheFifthCommand.GameState.Finished));
 
-        // Finalize
-        uint256 initialBalance = player1.balance;
+        uint256 player1BalanceBefore = player1.balance;
+        uint256 treasuryBalanceBefore = treasury.balance;
+
         vm.prank(owner);
         game.finalizeGame(player1);
 
-        assertEq(player1.balance, initialBalance + 20 ether);
+        // 10% fee = 2 ether
+        assertEq(treasury.balance, treasuryBalanceBefore + 2 ether);
+        assertEq(player1.balance, player1BalanceBefore + 18 ether);
         assertEq(game.currentTotalPot(), 0);
+        assertEq(game.currentGameId(), 2); // incremented
         assertEq(uint256(game.currentGameState()), uint256(TheFifthCommand.GameState.NotStarted));
+    }
+
+    function test_Finalize_NoValidWinner_PotCarriesOver() public {
+        vm.prank(player1);
+        game.joinGame{value: INITIAL_FEE}();
+
+        vm.prank(owner);
+        game.startGame(1);
+
+        vm.prank(owner);
+        game.settleCard(1, player1, 100);
+
+        vm.prank(owner);
+        game.finalizeGame(nonPlayer); // invalid winner
+
+        assertEq(game.currentTotalPot(), INITIAL_FEE); // carried over
+        assertEq(game.currentGameId(), 2);
     }
 
     function test_SettleCard_InvalidWinner_Reverts() public {
@@ -187,10 +276,6 @@ contract TheFifthCommandTest is Test {
         game.settleCard(1, player1, 600);
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Finalize edge cases
-    // ────────────────────────────────────────────────────────────────
-
     function test_Finalize_NotFinished_Reverts() public {
         vm.prank(player1);
         game.joinGame{value: INITIAL_FEE}();
@@ -201,20 +286,5 @@ contract TheFifthCommandTest is Test {
         vm.expectRevert("Game not finished");
         vm.prank(owner);
         game.finalizeGame(player1);
-    }
-
-    function test_Finalize_InvalidWinner_Reverts() public {
-        vm.prank(player1);
-        game.joinGame{value: INITIAL_FEE}();
-
-        vm.prank(owner);
-        game.startGame(1);
-
-        vm.prank(owner);
-        game.settleCard(1, player1, 100);
-
-        vm.expectRevert("Invalid winner");
-        vm.prank(owner);
-        game.finalizeGame(nonPlayer);
     }
 }

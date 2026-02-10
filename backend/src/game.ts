@@ -17,7 +17,7 @@ import {
 
 const MIN_INCREMENT = 10; // chips
 const ROUND_TIMEOUT_MS = 120_000; // 2 minutes
-const GAME_START_COUNTDOWN_MS = 30_000; // 3 minutes
+const GAME_START_COUNTDOWN_MS = 3 * 60_000; // 3 minutes
 const BID_MESSAGE_MAX_AGE_MS = 5 * 60_000; // 5 minutes
 
 // EIP-712 typed data
