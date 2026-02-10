@@ -1,5 +1,5 @@
 // Contract configuration for The Fifth Command
-export const CONTRACT_ADDRESS = "0x7e92D49C7B68E72DCd47Be223f9759f07AFe0eec";
+export const CONTRACT_ADDRESS = "0x9aDe9a5379F2E855088fCF62f4B954B72c0A03Bb";
 
 export const RPC_URL =process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL;
 
