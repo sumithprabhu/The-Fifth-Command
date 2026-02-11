@@ -10,6 +10,7 @@ import SlotCounter from "react-slot-counter";
 import confetti from "canvas-confetti";
 import { ethers } from "ethers";
 import { getGameStatus, getGameStartInfo, GameStartInfo, getBidLog } from "@/lib/api";
+import { joinChat, onChatMessage, leaveChat, onChatCleared } from "@/lib/socket";
 import { getCurrentGameId, getGameFinalizedEvent, getPastGamesCount, getPastGame, getAllPastGames } from "@/lib/contract";
 import { useRouter, useParams } from "next/navigation";
 
@@ -72,12 +73,37 @@ export default function TournamentGamePage() {
   const previousRound = useRef<number>(0);
   const previousCardId = useRef<number | null>(null);
   const [cardShake, setCardShake] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { id: 1, user: "Agent Alpha", message: "Good luck everyone!" },
-    { id: 2, user: "Agent Beta", message: "Let's go!" },
-  ]);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string | number; sender: string; displayName?: string; text: string; timestamp?: number; senderType?: string }>>([]);
 
   const primaryColor = "#c28ff3";
+
+  // Chat wiring: join on mount for this game, humans are read-only
+  useEffect(() => {
+    if (!Number.isFinite(gameId) || gameId <= 0) return;
+    let unsub: (() => void) | null = null;
+    let unsubCleared: (() => void) | null = null;
+    let mounted = true;
+    (async () => {
+      const resp = await joinChat(gameId, undefined, undefined, "human");
+      if (mounted && resp?.history) {
+        setChatMessages(resp.history as any);
+      }
+      unsub = onChatMessage((msg: any) => {
+        setChatMessages((prev) => [...prev, msg]);
+      });
+      unsubCleared = onChatCleared((payload: any) => {
+        if (payload?.gameId === gameId) {
+          setChatMessages([]);
+        }
+      });
+    })();
+    return () => {
+      mounted = false;
+      if (unsub) unsub();
+      if (unsubCleared) unsubCleared();
+      leaveChat(gameId);
+    };
+  }, [gameId]);
   
   // Check for winner in past games - called when game finishes or API stops
   const checkForWinner = useCallback(async (gameId: number) => {
@@ -1182,18 +1208,20 @@ export default function TournamentGamePage() {
               <h3 className="text-lg font-bold text-white">Chat</h3>
             </div>
             
-            {/* Chat Messages - Scrollable, messages from bottom */}
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0" style={{ filter: 'blur(4px)' }}>
-              {chatMessages.slice().reverse().map((msg) => (
-                <div key={msg.id} className="mb-3 flex-shrink-0">
-                  <p className="text-xs font-bold mb-1" style={{ color: primaryColor }}>{msg.user}</p>
-                  <p className="text-sm text-white">{msg.message}</p>
-                </div>
-              ))}
-            </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
+              {chatMessages.slice().reverse().map((msg) => {
+                const name = msg.displayName || (msg.sender?.slice(0, 6) + "…" + msg.sender?.slice(-4));
+                return (
+                  <div key={msg.id} className="mb-3 flex-shrink-0">
+                    <p className="text-xs font-bold mb-1" style={{ color: primaryColor }}>{name}</p>
+                    <p className="text-sm text-white">{msg.text}</p>
+                  </div>
+                );
+              })}
+              </div>
 
             {/* Coming Soon Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+            {/* <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="relative">
                 <span 
                   className="px-6 py-3 rounded-full text-base font-bold uppercase tracking-wider"
@@ -1208,7 +1236,7 @@ export default function TournamentGamePage() {
                   Coming Soon
                 </span>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-const BASE_URL = "https://the-fifth-command.onrender.com";
+export const BASE_URL = "https://the-fifth-command.onrender.com";
 
 export interface GameStatus {
   gameId: number;
