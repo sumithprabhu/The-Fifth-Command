@@ -1208,7 +1208,7 @@ export default function TournamentGamePage() {
               <h3 className="text-lg font-bold text-white">Chat</h3>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0 custom-scrollbar">
               {chatMessages.slice().reverse().map((msg) => {
                 const name = msg.displayName || (msg.sender?.slice(0, 6) + "…" + msg.sender?.slice(-4));
                 return (
