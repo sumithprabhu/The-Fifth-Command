@@ -4,8 +4,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuard {
+    // Config
     uint256 public entryFee;
     uint256 public startingChips;
     uint256 public maxPlayers;
@@ -27,11 +29,14 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public currentRound;
     uint256 public currentTotalCards;
 
+    // Player state
     address[] public currentPlayers;
     mapping(address => bool) public isCurrentPlayer;
     mapping(address => uint256) public currentChipBalance;
     mapping(address => uint256[]) public currentPlayerCards;
+    mapping(address => uint256) public entryFeePaid;
 
+    // Results
     struct GameResult {
         uint256 gameId;
         address winner;
@@ -40,11 +45,12 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 totalPlayers;
         uint256 timestamp;
     }
-
     GameResult[] public pastGames;
 
+    // Treasury
     address public treasuryWallet;
 
+    // Events
     event PlayerJoined(uint256 indexed gameId, address indexed player);
     event PlayerLeft(uint256 indexed gameId, address indexed player);
     event GameStarted(uint256 indexed gameId, uint256 totalCards);
@@ -68,6 +74,7 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function initialize(address initialOwner, address _treasuryWallet) public initializer {
         __Ownable_init(initialOwner);
+        require(_treasuryWallet != address(0), "Invalid treasury");
 
         entryFee = 10 ether;
         startingChips = 500;
@@ -78,26 +85,42 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // ────────────────────────────────────────────────────────────────
-    // Setter for max players
+    // Admin setters
     // ────────────────────────────────────────────────────────────────
     function setMaxPlayers(uint256 _maxPlayers) external onlyOwner {
         require(_maxPlayers >= 2, "Max players too low");
         require(currentGameState == GameState.NotStarted, "Cannot change during active game");
+        require(_maxPlayers >= currentPlayers.length, "Below current players");
         maxPlayers = _maxPlayers;
         emit MaxPlayersUpdated(_maxPlayers);
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Setter for treasury wallet
-    // ────────────────────────────────────────────────────────────────
     function setTreasuryWallet(address _treasuryWallet) external onlyOwner {
         require(_treasuryWallet != address(0), "Invalid treasury");
         treasuryWallet = _treasuryWallet;
         emit TreasuryWalletUpdated(_treasuryWallet);
     }
 
+    function setEntryFee(uint256 newFee) external onlyOwner {
+        require(newFee >= MIN_ENTRY_FEE, "Fee too low");
+        require(newFee <= MAX_ENTRY_FEE, "Fee too high");
+        require(currentGameState == GameState.NotStarted, "Cannot change during active game");
+        require(currentPlayers.length == 0, "Players already joined");
+        entryFee = newFee;
+        emit EntryFeeUpdated(newFee);
+    }
+
+    function setStartingChips(uint256 newChips) external onlyOwner {
+        require(newChips >= MIN_STARTING_CHIPS, "Chips too low");
+        require(newChips <= MAX_STARTING_CHIPS, "Chips too high");
+        require(currentGameState == GameState.NotStarted, "Cannot change during active game");
+        require(currentPlayers.length == 0, "Players already joined");
+        startingChips = newChips;
+        emit StartingChipsUpdated(newChips);
+    }
+
     // ────────────────────────────────────────────────────────────────
-    // Join game
+    // Game flow
     // ────────────────────────────────────────────────────────────────
     function joinGame() external payable {
         require(currentGameState == GameState.NotStarted, "Game not open for joining");
@@ -109,14 +132,12 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         currentChipBalance[msg.sender] = startingChips;
         isCurrentPlayer[msg.sender] = true;
         currentPlayers.push(msg.sender);
+        entryFeePaid[msg.sender] = msg.value;
 
         emit PlayerJoined(currentGameId, msg.sender);
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Leave before game starts — refund with .call
-    // ────────────────────────────────────────────────────────────────
-    function leaveGame() external {
+    function leaveGame() external nonReentrant {
         require(currentGameState == GameState.NotStarted, "Game already started");
         require(isCurrentPlayer[msg.sender], "Not a player");
 
@@ -132,40 +153,17 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         isCurrentPlayer[msg.sender] = false;
         currentChipBalance[msg.sender] = 0;
 
-        // Refund using .call (replaces .transfer)
-        uint256 amount = entryFee;
+        // Refund exact amount paid and update state before interaction
+        uint256 amount = entryFeePaid[msg.sender];
+        require(amount > 0, "Nothing to refund");
+        entryFeePaid[msg.sender] = 0;
+        currentTotalPot -= amount;
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         require(success, "Refund failed");
-
-        currentTotalPot -= amount;
 
         emit PlayerLeft(currentGameId, msg.sender);
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Setters for fee and chips
-    // ────────────────────────────────────────────────────────────────
-    function setEntryFee(uint256 newFee) external onlyOwner {
-        require(newFee >= MIN_ENTRY_FEE, "Fee too low");
-        require(newFee <= MAX_ENTRY_FEE, "Fee too high");
-        require(currentGameState == GameState.NotStarted, "Cannot change during active game");
-
-        entryFee = newFee;
-        emit EntryFeeUpdated(newFee);
-    }
-
-    function setStartingChips(uint256 newChips) external onlyOwner {
-        require(newChips >= MIN_STARTING_CHIPS, "Chips too low");
-        require(newChips <= MAX_STARTING_CHIPS, "Chips too high");
-        require(currentGameState == GameState.NotStarted, "Cannot change during active game");
-
-        startingChips = newChips;
-        emit StartingChipsUpdated(newChips);
-    }
-
-    // ────────────────────────────────────────────────────────────────
-    // Start game
-    // ────────────────────────────────────────────────────────────────
     function startGame(uint256 totalCards) external onlyOwner {
         require(currentGameState == GameState.NotStarted, "Game already started");
         require(totalCards > 0, "Invalid card count");
@@ -177,16 +175,11 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit GameStarted(currentGameId, totalCards);
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Settle one card
-    // ────────────────────────────────────────────────────────────────
     function settleCard(uint256 cardId, address winner, uint256 finalPrice) external onlyOwner {
         require(currentGameState == GameState.InProgress, "No active game");
         require(currentRound <= currentTotalCards, "All cards done");
 
-        // Allow skipped cards (no one bid)
         bool isSkipped = (finalPrice == 0 && winner == address(0));
-
         if (!isSkipped) {
             require(isCurrentPlayer[winner], "Not a player");
             require(currentChipBalance[winner] >= finalPrice, "Not enough chips");
@@ -197,18 +190,13 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         emit CardSettled(currentGameId, currentRound, cardId, winner, finalPrice);
-
         currentRound++;
-
         if (currentRound > currentTotalCards) {
             currentGameState = GameState.Finished;
         }
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // Finalize game
-    // ────────────────────────────────────────────────────────────────
-    function finalizeGame(address winner) external onlyOwner {
+    function finalizeGame(address winner) external onlyOwner nonReentrant {
         require(currentGameState == GameState.Finished, "Game not finished");
 
         uint256 potBeforeFee = currentTotalPot;
@@ -219,20 +207,18 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 potPaid = 0;
         uint256 potCarriedOver = 0;
 
-        // Send fee to treasury
+        // Send fee to treasury first
         if (fee > 0) {
-            (bool success, ) = payable(treasuryWallet).call{value: fee}("");
-            require(success, "Fee transfer failed");
+            (bool feeOk, ) = payable(treasuryWallet).call{value: fee}("");
+            require(feeOk, "Fee transfer failed");
         }
 
         if (isCurrentPlayer[winner]) {
             recipient = winner;
             potPaid = payout;
-
-            (bool success, ) = payable(winner).call{value: payout}("");
-            require(success, "Payout to winner failed");
-
-            currentTotalPot = 0;
+            currentTotalPot = 0; // effects before interaction
+            (bool winOk, ) = payable(winner).call{value: payout}("");
+            require(winOk, "Payout to winner failed");
         } else {
             // No valid winner → carry over (after fee)
             recipient = address(0);
@@ -268,13 +254,14 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             address p = currentPlayers[i];
             isCurrentPlayer[p] = false;
             currentChipBalance[p] = 0;
+            entryFeePaid[p] = 0;
             delete currentPlayerCards[p];
         }
         delete currentPlayers;
     }
 
     // ────────────────────────────────────────────────────────────────
-    // View functions
+    // Views
     // ────────────────────────────────────────────────────────────────
     function getCurrentPlayerCount() external view returns (uint256) {
         return currentPlayers.length;
@@ -296,6 +283,5 @@ contract TheFifthCommand is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    // Allow contract to receive ETH
     receive() external payable {}
 }
