@@ -3,6 +3,22 @@ import { config } from "./config";
 
 export const CONTRACT_ABI = [
   {
+    name: "PlayerJoined",
+    type: "event",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "player", type: "address", indexed: true }
+    ]
+  },
+  {
+    name: "PlayerLeft",
+    type: "event",
+    inputs: [
+      { name: "gameId", type: "uint256", indexed: true },
+      { name: "player", type: "address", indexed: true }
+    ]
+  },
+  {
     name: "joinGame",
     type: "function",
     stateMutability: "payable",

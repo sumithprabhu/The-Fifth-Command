@@ -746,8 +746,19 @@ export async function getGameStartInfo(): Promise<any> {
     gameStartsInSeconds = remaining > 0 ? remaining : null;
   }
 
+  // Derive status more robustly
+  let status: "ready" | "waiting" | "started" = "waiting";
+  if (state.gameState === "InProgress") {
+    status = "started";
+    gameStartsInSeconds = null;
+  } else if (state.gameStartTimeoutHandle) {
+    status = "ready";
+  } else {
+    status = "waiting";
+  }
+
   return {
-    status: state.gameStartTimeoutHandle ? "ready" : playerAddresses.length > 0 ? "waiting" : "waiting",
+    status,
     playersJoined: playerInfoList,
     minPlayersRequired: state.minPlayersRequired,
     gameStartsInSeconds
@@ -863,6 +874,30 @@ export function getBidLog(gameId: number, round: number): BidEntry[] {
 
 function wireContractEvents() {
   if (!contractInstance || !contractInstance.provider) return;
+    contractInstance.on(
+      "PlayerJoined",
+      async (gameId: BigNumber, player: string) => {
+        try {
+          logger.info({ gameId: gameId.toString(), player }, "PlayerJoined event");
+          await maybeStartGameIfReady(state.minPlayersRequired);
+        } catch (e) {
+          logger.warn({ err: e }, "maybeStartGameIfReady failed on PlayerJoined");
+        }
+      }
+    );
+
+    contractInstance.on(
+      "PlayerLeft",
+      async (gameId: BigNumber, player: string) => {
+        try {
+          logger.info({ gameId: gameId.toString(), player }, "PlayerLeft event");
+          await maybeStartGameIfReady(state.minPlayersRequired);
+        } catch (e) {
+          logger.warn({ err: e }, "maybeStartGameIfReady failed on PlayerLeft");
+        }
+      }
+    );
+  
 
   contractInstance.on(
     "GameStarted",
@@ -1000,7 +1035,7 @@ async function syncStateFromContract(): Promise<void> {
           state.wonCards[winner].push(card);
         }
 
-        console.log("EVENT: ", event)
+        // Event reconstructed for internal state; no console output in production
       }
       
       logger.info(
