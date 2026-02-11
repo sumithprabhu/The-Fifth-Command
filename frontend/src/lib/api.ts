@@ -62,7 +62,7 @@ export async function submitBid(message: any, signature: string): Promise<any> {
  * Get bid log for a specific game and round
  */
 export async function getBidLog(gameId: number, round: number): Promise<any[]> {
-  const response = await fetch(`${BASE_URL}/api/v1/bid-log/${gameId}/${round}`, {
+  const response = await fetch(`${BASE_URL}/api/v1/bid/log/${gameId}/${round}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",

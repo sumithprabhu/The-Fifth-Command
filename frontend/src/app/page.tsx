@@ -955,7 +955,7 @@ export default function Home() {
                           {parseFloat(tournament.poolAmount).toFixed(2)} MON
                         </p>
                         {(tournament.status === "live" || tournament.status === "notStarted") && (
-                          <Link href="/tournament">
+                          <Link href={`/tournament/${tournament.gameId}`}>
                             <button
                               className="w-full rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
                               style={{

@@ -2,3 +2,5 @@
 testing/*
 # Especially ignore session_safe.json (contains private keys!)
 testing/session_safe.json
+
+remotion/*
