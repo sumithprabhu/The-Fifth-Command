@@ -54,7 +54,7 @@ function checkRate(socketId: string): boolean {
 export function registerChatHandlers(io: SocketIOServer, socket: Socket) {
   socket.on(
     "chat:join",
-    (payload: { gameId?: number; user?: string; displayName?: string; }, cb?: (resp: any) => void) => {
+    (payload: { gameId?: number; }, cb?: (resp: any) => void) => {
     const gameId = Number(payload?.gameId);
     if (!Number.isFinite(gameId) || gameId <= 0) {
       cb?.({ ok: false, error: "Invalid gameId" });
