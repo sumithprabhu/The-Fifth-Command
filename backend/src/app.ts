@@ -12,6 +12,7 @@ import { getContract } from "./contract";
 import * as game from "./game";
 import { createRoutes } from "./routes";
 import { openApiSpec } from "./docs";
+import { registerChatHandlers } from "./chat";
 
 function createApp() {
   const app = express();
@@ -92,6 +93,9 @@ async function bootstrap() {
     socket.on("disconnect", () => {
       logger.info({ socketId: socket.id }, "Socket disconnected");
     });
+
+    // Chat handlers
+    registerChatHandlers(io, socket);
   });
 
   setInterval(() => {

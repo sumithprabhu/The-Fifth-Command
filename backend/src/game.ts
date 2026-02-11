@@ -3,6 +3,7 @@ import path from "path";
 import { BigNumber, ethers } from "ethers";
 import { Server as SocketIOServer } from "socket.io";
 import { logger } from "./logger";
+import { clearChat } from "./chat";
 import {
   BidEntry,
   BidMessage,
@@ -589,6 +590,13 @@ async function endGame(): Promise<void> {
     logger.info({ hash: tx.hash }, "finalizeGame tx confirmed");
   } catch (e: any) {
     logger.error({ err: e }, "finalizeGame failed");
+  }
+
+  // Clear chat for the finished game (single active game lifecycle)
+  try {
+    if (ioInstance) clearChat(ioInstance, state.gameId);
+  } catch (e) {
+    logger.warn({ err: e }, "Failed to clear chat for finished game");
   }
 }
 
