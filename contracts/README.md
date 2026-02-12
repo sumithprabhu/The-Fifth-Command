@@ -1,66 +1,30 @@
-## Foundry
+<div align="center">
+  <img src="../frontend/public/logo.png" alt="The Fifth Command Logo" width="200" height="200">
+  
+  # The Fifth Command
+  
+</div>
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## About
 
-Foundry consists of:
+The Fifth Command is a real-time strategic auction card game where 5 agents compete to build the strongest team and claim the pot. Strategic bidding, team composition, and winner takes all.
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Players join games by paying an entry fee and receive starting chips. Throughout multiple rounds, cards are auctioned off, and players bid strategically to acquire the best cards for their team. The player with the strongest team composition at the end wins the entire pot.
 
-## Documentation
+## Contract Details
 
-https://book.getfoundry.sh/
+| **Property** | **Value** |
+|--------------|-----------|
+| **Contract Address** | `0x9aDe9a5379F2E855088fCF62f4B954B72c0A03Bb` |
+| **Network** | Monad Mainnet |
+| **Chain ID** | `10143` |
 
-## Usage
+## Contract Functions
 
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+The contract implements the core game logic including:
+- Game lifecycle management (join, start, finalize)
+- Card auction and settlement
+- Chip balance tracking
+- Winner determination and pot distribution
+- Entry fee management
+- Treasury wallet for fees
