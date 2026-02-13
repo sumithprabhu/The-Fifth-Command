@@ -118,5 +118,3 @@ bootstrap().catch((e) => {
   logger.fatal({ err: e }, "Fatal error during bootstrap");
   process.exit(1);
 });
-
-

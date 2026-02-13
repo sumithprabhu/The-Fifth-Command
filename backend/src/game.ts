@@ -3,6 +3,7 @@ import path from "path";
 import { BigNumber, ethers } from "ethers";
 import { Server as SocketIOServer } from "socket.io";
 import { logger } from "./logger";
+import { onContractUpdated } from "./contract";
 import { clearChat } from "./chat";
 import {
   BidEntry,
@@ -27,6 +28,7 @@ const BID_DOMAIN_VERSION = "1";
 
 let ioInstance: SocketIOServer | null = null;
 let contractInstance: ethers.Contract | null = null;
+let lastContractInstance: ethers.Contract | null = null;
 let chainIdCached: number | null = null;
 
 interface InternalState {
@@ -882,6 +884,10 @@ export function getBidLog(gameId: number, round: number): BidEntry[] {
 
 function wireContractEvents() {
   if (!contractInstance || !contractInstance.provider) return;
+    // Ensure previous listeners are cleared to avoid duplicates
+    try {
+      contractInstance.removeAllListeners?.();
+    } catch {}
     contractInstance.on(
       "PlayerJoined",
       async (gameId: BigNumber, player: string) => {
@@ -1092,6 +1098,7 @@ async function syncStateFromContract(): Promise<void> {
 }
 
 export async function init({ contract, io }: GameEngineDeps): Promise<void> {
+  lastContractInstance = contractInstance;
   contractInstance = contract;
   ioInstance = io;
   loadCards();
@@ -1099,6 +1106,24 @@ export async function init({ contract, io }: GameEngineDeps): Promise<void> {
   
   // Sync state from contract on startup
   await syncStateFromContract();
+
+  // Rewire on provider/contract rotation
+  onContractUpdated(async ({ contract: newContract }) => {
+    try {
+      logger.warn("RPC provider rotated, re-wiring contract events and syncing state");
+      // Clear listeners on old instance
+      try {
+        lastContractInstance?.removeAllListeners?.();
+      } catch {}
+      lastContractInstance = contractInstance;
+      contractInstance = newContract;
+      chainIdCached = null;
+      wireContractEvents();
+      await syncStateFromContract();
+    } catch (e) {
+      logger.error({ err: e }, "Failed to rewire after provider rotation");
+    }
+  });
 }
 
 

@@ -6,6 +6,7 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.string().default("4000"),
+  // Comma-separated list is allowed
   RPC_URL: z.string().min(1, "RPC_URL is required"),
   CONTRACT_ADDRESS: z.string().min(1, "CONTRACT_ADDRESS is required"),
   RELAYER_PRIVATE_KEY: z.string().min(1, "RELAYER_PRIVATE_KEY is required"),
@@ -26,7 +27,10 @@ if (!parsed.success) {
 export const config = {
   nodeEnv: parsed.data.NODE_ENV,
   port: parseInt(parsed.data.PORT, 10),
-  rpcUrl: parsed.data.RPC_URL,
+  // Support multiple RPC URLs via comma-separated list
+  rpcUrls: parsed.data.RPC_URL.split(",").map((s) => s.trim()).filter(Boolean),
+  // Backward compatible primary URL
+  rpcUrl: parsed.data.RPC_URL.split(",").map((s) => s.trim()).filter(Boolean)[0],
   contractAddress: parsed.data.CONTRACT_ADDRESS,
   relayerPrivateKey: parsed.data.RELAYER_PRIVATE_KEY,
   chainId: parseInt(parsed.data.CHAIN_ID, 10),
