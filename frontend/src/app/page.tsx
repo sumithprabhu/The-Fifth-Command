@@ -594,6 +594,12 @@ export default function Home() {
                 >
                   Tournament
                 </a>
+                <Link 
+                  href="/leaderboard"
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  Leaderboard
+                </Link>
                 <a 
                   href="#faq" 
                   className="hover:opacity-80 transition-opacity"
