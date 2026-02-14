@@ -860,18 +860,32 @@ export default function Home() {
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                 LIVE TOURNAMENT
               </h2>
-              <Link 
-                href="/tournaments"
-                className="flex items-center gap-2 rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
-                style={{ 
-                  background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
-                  fontFamily: 'Arial, Helvetica, sans-serif',
-                  boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4)'
-                }}
-              >
-                View More
-                <span className="text-xl">→</span>
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link 
+                  href="/leaderboard"
+                  className="flex items-center gap-2 rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
+                  style={{ 
+                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #B45309 100%)',
+                    fontFamily: 'Arial, Helvetica, sans-serif',
+                    boxShadow: '0 4px 15px rgba(217, 119, 6, 0.4)'
+                  }}
+                >
+                  Leaderboard
+                  <span className="text-xl">🏆</span>
+                </Link>
+                <Link 
+                  href="/tournaments"
+                  className="flex items-center gap-2 rounded-lg px-6 py-3 text-base font-bold text-white transition-all hover:opacity-90"
+                  style={{ 
+                    background: 'linear-gradient(135deg, #B794F6 0%, #9B7EDE 50%, #7C5ACF 100%)',
+                    fontFamily: 'Arial, Helvetica, sans-serif',
+                    boxShadow: '0 4px 15px rgba(124, 90, 207, 0.4)'
+                  }}
+                >
+                  View More
+                  <span className="text-xl">→</span>
+                </Link>
+              </div>
             </div>
             
             {/* Tournament Cards - Grid 4 columns */}
@@ -1363,6 +1377,11 @@ function Footer() {
                       Coming Soon
                     </span>
                   </span>
+                </li>
+                <li>
+                  <Link href="/leaderboard" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                    Leaderboard
+                  </Link>
                 </li>
                 <li>
                   <Link href="/support" className="text-white/70 hover:text-white text-sm transition-colors" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
