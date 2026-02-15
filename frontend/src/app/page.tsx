@@ -580,7 +580,7 @@ export default function Home() {
 
             {/* Navigation and CTA */}
             <div className="flex items-center gap-4 md:gap-6">
-              <nav className="hidden items-center gap-5 text-sm font-bold text-white md:flex md:gap-6 md:text-base" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+              <nav className="flex items-center gap-4 text-sm font-bold text-white md:gap-6 md:text-base" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
                 <a 
                   href="#tournament" 
                   className="hover:opacity-80 transition-opacity"
@@ -602,7 +602,7 @@ export default function Home() {
                 </Link>
                 <a 
                   href="#faq" 
-                  className="hover:opacity-80 transition-opacity"
+                  className="hidden hover:opacity-80 transition-opacity md:inline-block"
                   onClick={(e) => {
                     e.preventDefault();
                     const element = document.getElementById('faq');
